@@ -45,9 +45,12 @@ class NETWORKEDSHOOTER_API USCombatComponent : public UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Combat | Zoom")
 	float ZoomInterpSpeed = 20.f;
 
+
 public:
 	
-	FMulticastNotifyDelegate OnControllerSet;
+	FMulticastNotifyDelegate OnPlayerControllerSet;
+	
+	FMulticastNotifyDelegate OnCharacterSet;
 	
 	FOnInt32UpdatedDelegate OnCarriedAmmoUpdated;
 	
@@ -57,8 +60,16 @@ public:
 	
 private:
 
-	UPROPERTY(Replicated)
-	bool bAiming;
+	// read with HasAuthority()
+	bool bHasAuthority;
+
+	// read with IsLocallyControlled()
+	bool bIsLocallyControlled;
+	
+	bool bAimButtonPressed = false;
+	
+	UPROPERTY(ReplicatedUsing=OnRep_Aiming)
+	bool bAiming = false;
 
 	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon)
 	ASWeapon* EquippedWeapon;
@@ -75,7 +86,7 @@ private:
 	bool bFireButtonPressed;
 	FVector_NetQuantize HitTarget;
 
-	UPROPERTY() ASCharacter* Character;
+	UPROPERTY() ASCharacter* OwnerCharacter;
 	UPROPERTY() class ASPlayerController* PlayerController;
 	UPROPERTY() class ASHUD* HUD;
 
@@ -87,6 +98,7 @@ private:
 	
 	float DefaultFOV;
 	float CurrentFOV;
+
 	
 public:
 	
@@ -94,7 +106,7 @@ public:
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	void SetCharacter(ASCharacter* NewCharacter);
+	void SetOwnerCharacter(ASCharacter* NewCharacter);
 
 	void SetPlayerController(AController* NewController);
 
@@ -145,6 +157,8 @@ protected:
 	void SetAiming(bool bIsAiming);
 	UFUNCTION(Server, Reliable)
 	void ServerSetAiming(bool bIsAiming);
+	UFUNCTION()
+	void OnRep_Aiming();
 
 	void ThrowGrenade();
 	UFUNCTION(Server, Reliable)
@@ -180,11 +194,11 @@ protected:
 	void AttachActorToBackpack(AActor* ActorToAttach) const;
 
 public:
-	
+	FORCEINLINE bool HasAuthority() const { return bHasAuthority; }
+	FORCEINLINE bool IsLocallyControlled() const { return bIsLocallyControlled; }
+
 	FORCEINLINE int32 GetCarriedAmmo() const { return CarriedAmmo; };
 	FORCEINLINE int32 GetGrenades() const { return Grenades; }
 	FORCEINLINE bool GetFireButtonPressed() const { return bFireButtonPressed; }
 	FORCEINLINE ESCombatState GetCombatState() const { return CombatState; }
-
 };
-

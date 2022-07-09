@@ -25,6 +25,8 @@ public:
 	virtual void OnRep_Pawn() override;
 
 	virtual void Tick(float DeltaSeconds) override;
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	bool HasLocalAuthority() const;
 
@@ -56,9 +58,7 @@ protected:
 	virtual void BeginPlay() override;
 
 	virtual void OnPossess(APawn* NewPawn) override;
-	
 	virtual void OnUnPossess() override;
-	// void AddCharacterHUD();
 
 	void HandleMatchHasStarted();
 	void HandleCooldown();

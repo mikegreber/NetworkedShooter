@@ -82,7 +82,7 @@ void ASCharacter::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 	
-	if (CombatComponent) CombatComponent->SetCharacter(this);
+	if (CombatComponent) CombatComponent->SetOwnerCharacter(this);
 	
 	if (BuffComponent) BuffComponent->SetCharacter(this);
 	

@@ -42,12 +42,19 @@ void ASPlayerController::BeginPlay()
 	if (IsLocalController())
 	{
 		InitGameStateAndTick();
+		
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, this, &ASPlayerController::CheckPing, CheckPingFrequency, true);
 	}
 
 	ServerCheckMatchState();
+}
 
-	FTimerHandle Handle;
-	GetWorldTimerManager().SetTimer(Handle, this, &ASPlayerController::CheckPing, CheckPingFrequency, true);
+void ASPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	GetWorldTimerManager().ClearAllTimersForObject(this);
+	
+	Super::EndPlay(EndPlayReason);
 }
 
 void ASPlayerController::InitGameStateAndTick()
@@ -527,16 +534,18 @@ void ASPlayerController::SetHUDAnnouncementCountdown(float CountdownTime)
 
 void ASPlayerController::SetHUDTime()
 {
-	float TimeLeft = 0.f;
-	if (MatchState == MatchState::WaitingToStart) TimeLeft = WarmupTime - GetServerTime() + LevelStartingTime;
-	else if (MatchState == MatchState::InProgress) TimeLeft = WarmupTime + MatchTime - GetServerTime() + LevelStartingTime;
-	else if (MatchState == MatchState::Cooldown) TimeLeft = WarmupTime + MatchTime + CooldownTime - GetServerTime() + LevelStartingTime;
-
-	uint32 SecondsLeft = FMath::CeilToInt(TimeLeft);
-	
+	uint32 SecondsLeft;
 	if (HasAuthority() && GameMode)
 	{
 		SecondsLeft = FMath::CeilToInt(GameMode->GetCountdownTime() + LevelStartingTime);
+	}
+	else
+	{
+		float TimeLeft = 0.f;
+		if (MatchState == MatchState::WaitingToStart) TimeLeft = WarmupTime - GetServerTime() + LevelStartingTime;
+		else if (MatchState == MatchState::InProgress) TimeLeft = WarmupTime + MatchTime - GetServerTime() + LevelStartingTime;
+		else if (MatchState == MatchState::Cooldown) TimeLeft = WarmupTime + MatchTime + CooldownTime - GetServerTime() + LevelStartingTime;
+		SecondsLeft = FMath::CeilToInt(TimeLeft);
 	}
 	
 	if (CountdownInt != SecondsLeft)
