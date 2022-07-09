@@ -17,6 +17,8 @@
 USCombatComponent::USCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.SetTickFunctionEnable(false);
+	
 	SetIsReplicatedByDefault(true);
 	
 	BaseWalkSpeed = 600.f;
@@ -45,12 +47,12 @@ void USCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION(USCombatComponent, Grenades, COND_OwnerOnly);
 }
 
-void USCombatComponent::BeginPlay()
+void USCombatComponent::SetCharacter(ASCharacter* NewCharacter)
 {
-	Super::BeginPlay();
-
-	if (Character)
+	if (NewCharacter)
 	{
+		Character = NewCharacter;
+		
 		Character->GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 		if (Character->GetFollowCamera())
 		{
@@ -58,32 +60,37 @@ void USCombatComponent::BeginPlay()
 			CurrentFOV = DefaultFOV;
 		}
 
-		Character->ReceiveControllerChangedDelegate.AddDynamic(this, &USCombatComponent::OnControllerChanged);
+		if (PlayerController && PlayerController->IsLocalController()) SetComponentTickEnabled(true);
 	}
 }
 
-void USCombatComponent::OnControllerChanged(APawn* Pawn, AController* OldController, AController* NewController)
+void USCombatComponent::SetPlayerController(AController* NewController)
 {
-	Controller = Cast<ASPlayerController>(NewController);
-	if (Controller)
+	if (NewController != PlayerController)
 	{
-		OnControllerSet.Broadcast();
-		OnControllerSet.Clear();
+		if (ASPlayerController* NewPlayerController = Cast<ASPlayerController>(NewController))
+		{
+			PlayerController = NewPlayerController;
+			HUD = PlayerController->GetHUD<ASHUD>();
+			
+			OnControllerSet.Broadcast();
+			OnControllerSet.Clear();
+			
+			if (Character && Character->IsLocallyControlled()) SetComponentTickEnabled(true);
+		}
 	}
 }
 
+// only ticks on locally controlled character after Character are PlayerController are both set
 void USCombatComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	if (Character && Character->IsLocallyControlled())
-	{
-		FHitResult HitResult;
-		TraceUnderCrosshairs(HitResult);
-		HitTarget = HitResult.ImpactPoint;
-		SetHUDCrosshairs(DeltaTime);
-		InterpFOV(DeltaTime);
-	}
+	
+	FHitResult HitResult;
+	TraceUnderCrosshairs(HitResult);
+	HitTarget = HitResult.ImpactPoint;
+	SetHUDCrosshairs(DeltaTime);
+	InterpFOV(DeltaTime);
 }
 
 void USCombatComponent::TraceUnderCrosshairs(FHitResult& TraceHitResult)
@@ -134,58 +141,51 @@ void USCombatComponent::TraceUnderCrosshairs(FHitResult& TraceHitResult)
 
 void USCombatComponent::SetHUDCrosshairs(float DeltaTime)
 {
-		if (Character && Character->Controller)
+		if (EquippedWeapon)
 		{
-			Controller = Controller ? Controller : Cast<ASPlayerController>(Character->Controller);
-			if (Controller)
+			HUDPackage.SetCrosshairs(EquippedWeapon->GetHUDPackage());
+			
+			FVector Velocity = Character->GetVelocity();
+			Velocity.Z = 0;
+			
+			const FVector2D WalkSpeedRange(0.f, Character->GetCharacterMovement()->MaxWalkSpeed);
+			const FVector2D VelocityMultiplierRange(0.f, 1.f);
+
+			CrosshairVelocityFactor = FMath::GetMappedRangeValueClamped(WalkSpeedRange, VelocityMultiplierRange, Velocity.Size());
+
+			if (Character->GetCharacterMovement()->IsFalling())
 			{
-				HUD = HUD == nullptr ? Cast<ASHUD>(Controller->GetHUD()) : HUD;
-				if (HUD)
-				{
-					if (EquippedWeapon)
-					{
-						HUDPackage.SetCrosshairs(EquippedWeapon->GetHUDPackage());
-						
-						FVector Velocity = Character->GetVelocity();
-						Velocity.Z = 0;
-						
-						const FVector2D WalkSpeedRange(0.f, Character->GetCharacterMovement()->MaxWalkSpeed);
-						const FVector2D VelocityMultiplierRange(0.f, 1.f);
-
-						CrosshairVelocityFactor = FMath::GetMappedRangeValueClamped(WalkSpeedRange, VelocityMultiplierRange, Velocity.Size());
-
-						if (Character->GetCharacterMovement()->IsFalling())
-						{
-							CrosshairInAirFactor = FMath::FInterpTo(CrosshairInAirFactor, 2.25f, DeltaTime, 2.25);
-						}
-						else
-						{
-							CrosshairInAirFactor = FMath::FInterpTo(CrosshairInAirFactor, 0.f, DeltaTime, 30.f);
-						}
-						
-						if (bAiming)
-						{
-							CrosshairAimFactor = FMath::FInterpTo(CrosshairAimFactor, 0.58f, DeltaTime, 30.f);
-						}
-						else
-						{
-							CrosshairAimFactor = FMath::FInterpTo(CrosshairAimFactor, 0.f, DeltaTime, 30.f);
-						}
-
-						CrosshairShootingFactor = FMath::FInterpTo(CrosshairShootingFactor, 0.f, DeltaTime, 40.f);
-						
-						HUDPackage.CrosshairSpread =
-							0.5f +
-							CrosshairVelocityFactor +
-							CrosshairInAirFactor -
-							CrosshairAimFactor +
-							CrosshairShootingFactor;
-					}
-					
-					HUD->SetHUDPackage(HUDPackage);
-				}
+				CrosshairInAirFactor = FMath::FInterpTo(CrosshairInAirFactor, 2.25f, DeltaTime, 2.25);
 			}
+			else
+			{
+				CrosshairInAirFactor = FMath::FInterpTo(CrosshairInAirFactor, 0.f, DeltaTime, 30.f);
+			}
+			
+			if (bAiming)
+			{
+				CrosshairAimFactor = FMath::FInterpTo(CrosshairAimFactor, 0.58f, DeltaTime, 30.f);
+			}
+			else
+			{
+				CrosshairAimFactor = FMath::FInterpTo(CrosshairAimFactor, 0.f, DeltaTime, 30.f);
+			}
+
+			CrosshairShootingFactor = FMath::FInterpTo(CrosshairShootingFactor, 0.f, DeltaTime, 40.f);
+			
+			HUDPackage.CrosshairSpread =
+				0.5f +
+				CrosshairVelocityFactor +
+				CrosshairInAirFactor -
+				CrosshairAimFactor +
+				CrosshairShootingFactor;
 		}
+		else
+		{
+			HUDPackage.SetCrosshairs(FHUDPackage());
+		}
+		
+		HUD->SetHUDPackage(HUDPackage);
 }
 
 void USCombatComponent::InterpFOV(float DeltaTime)
@@ -215,6 +215,8 @@ bool USCombatComponent::CanFire() const
 
 void USCombatComponent::FireButtonPressed(bool bPressed)
 {
+	LOCALLY_CONTROLLED_ONLY(Character);
+	
 	bFireButtonPressed = bPressed;
 
 	if (bFireButtonPressed)
@@ -225,8 +227,13 @@ void USCombatComponent::FireButtonPressed(bool bPressed)
 
 void USCombatComponent::FireWeapon()
 {
-	EquippedWeapon->Fire(HitTarget);
-	CrosshairShootingFactor = 1.f;
+	LOCALLY_CONTROLLED_ONLY(Character);
+	
+	if (EquippedWeapon)
+	{
+		EquippedWeapon->Fire(HitTarget);
+		CrosshairShootingFactor = 1.f;
+	}
 }
 
 void USCombatComponent::EquipWeapon(ASWeapon* WeaponToEquip)
@@ -411,8 +418,6 @@ void USCombatComponent::ServerSetAiming_Implementation(bool bIsAiming)
 
 void USCombatComponent::ThrowGrenade()
 {
-	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_COMPONENT)
-
 	if (Grenades > 0 && CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon)
 	{
 		ServerThrowGrenade();
@@ -439,8 +444,6 @@ void USCombatComponent::ShowAttachedGrenade(bool bShowGrenade) const
 
 void USCombatComponent::LaunchGrenade()
 {
-	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_COMPONENT);
-
 	ShowAttachedGrenade(false);
 
 	if (Character && Character->IsLocallyControlled())
@@ -451,8 +454,6 @@ void USCombatComponent::LaunchGrenade()
 
 void USCombatComponent::ServerLaunchGrenade_Implementation(const FVector_NetQuantize& Target)
 {
-	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_COMPONENT);
-
 	if (GrenadeClass && Character && Character->GetAttachedGrenade())
 	{
 		const FVector StartingLocation = Character->GetAttachedGrenade()->GetComponentLocation();
@@ -497,15 +498,12 @@ void USCombatComponent::PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount)
 
 void USCombatComponent::UpdateCarriedAmmo()
 {
-	if (Controller)
+	if (PlayerController)
 	{
-		if (EquippedWeapon)
+		if (EquippedWeapon && CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
 		{
-			if (CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
-			{
-				CarriedAmmo = CarriedAmmoMap[EquippedWeapon->GetWeaponType()];
-				if (Controller->HasLocalAuthority()) OnRep_CarriedAmmo();
-			}
+			CarriedAmmo = CarriedAmmoMap[EquippedWeapon->GetWeaponType()];
+			if (PlayerController->HasLocalAuthority()) OnRep_CarriedAmmo();
 		}
 	}
 	else

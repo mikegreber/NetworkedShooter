@@ -76,7 +76,7 @@ private:
 	FVector_NetQuantize HitTarget;
 
 	UPROPERTY() ASCharacter* Character;
-	UPROPERTY() class ASPlayerController* Controller;
+	UPROPERTY() class ASPlayerController* PlayerController;
 	UPROPERTY() class ASHUD* HUD;
 
 	FHUDPackage HUDPackage;
@@ -93,7 +93,11 @@ public:
 	USCombatComponent();
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	
+
+	void SetCharacter(ASCharacter* NewCharacter);
+
+	void SetPlayerController(AController* NewController);
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	
 	bool CanFire() const;
@@ -105,11 +109,6 @@ public:
 	void PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount);
 
 protected:
-	
-	virtual void BeginPlay() override;
-	
-	UFUNCTION()
-	void OnControllerChanged(APawn* Pawn, AController* OldController, AController* NewController);
 	
 	void TraceUnderCrosshairs(FHitResult& TraceHitResult);
 
@@ -160,7 +159,8 @@ protected:
 	
 	UFUNCTION(BlueprintCallable)
 	void ThrowGrenadeFinished();
-	
+
+	UFUNCTION()
 	void UpdateCarriedAmmo();
 	UFUNCTION()
 	void OnRep_CarriedAmmo() const;

@@ -16,10 +16,9 @@ class NETWORKEDSHOOTER_API USBuffComponent : public UActorComponent
 
 public:	
 	USBuffComponent();
-	friend class ASCharacter;
+	// friend class ASCharacter;
 
-	void SetInitialSpeeds(float BaseSpeed, float CrouchSpeed);
-	void SetInitialJumpVelocity(float Velocity);
+	void SetCharacter(class ASCharacter* AsCharacter);
 	
 	void Heal(float HealAmount, float HealingTime);
 
@@ -30,7 +29,6 @@ public:
 	void BuffJump(float JumpZVelocityBuff, float JumpBuffTime);
 
 protected:
-	virtual void BeginPlay() override;
 
 	void HealRampUp(float DeltaTime);
 	

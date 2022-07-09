@@ -85,7 +85,7 @@ protected:
 
 	UPROPERTY()
 	class ASPlayerController* PlayerController;
-	void SetPlayerController(AController* NewController, const AController* OldController = nullptr);
+	void SetPlayerController(AController* NewController, AController* OldController = nullptr);
 	
 private:
 	

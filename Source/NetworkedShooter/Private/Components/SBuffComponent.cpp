@@ -11,21 +11,15 @@ USBuffComponent::USBuffComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
-void USBuffComponent::SetInitialSpeeds(float BaseSpeed, float CrouchSpeed)
+void USBuffComponent::SetCharacter(ASCharacter* NewCharacter)
 {
-	InitialBaseSpeed = BaseSpeed;
-	InitialCrouchSpeed = CrouchSpeed;
-}
-
-void USBuffComponent::SetInitialJumpVelocity(float Velocity)
-{
-	InitialJumpZVelocity = Velocity;
-}
-
-
-void USBuffComponent::BeginPlay()
-{
-	Super::BeginPlay();
+	if (NewCharacter)
+	{
+		Character = NewCharacter;
+		InitialBaseSpeed = Character->GetCharacterMovement()->MaxWalkSpeed;
+		InitialCrouchSpeed = Character->GetCharacterMovement()->MaxWalkSpeedCrouched;
+		InitialJumpZVelocity = Character->GetCharacterMovement()->JumpZVelocity;
+	}
 }
 
 void USBuffComponent::Heal(float HealAmount, float HealingTime)

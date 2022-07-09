@@ -43,6 +43,7 @@ ASCharacter::ASCharacter()
 
 	CombatComponent = CreateDefaultSubobject<USCombatComponent>("CombatComponent");
 	CombatComponent->SetIsReplicated(true);
+	CombatComponent->SetComponentTickEnabled(false);
 	
 	BuffComponent = CreateDefaultSubobject<USBuffComponent>("BuffComponent");
 	BuffComponent->SetIsReplicated(true);
@@ -77,9 +78,24 @@ void ASCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(ASCharacter, Shield);
 }
 
+void ASCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+	
+	if (CombatComponent) CombatComponent->SetCharacter(this);
+	
+	if (BuffComponent) BuffComponent->SetCharacter(this);
+	
+	if (AttachedGrenade) AttachedGrenade->SetVisibility(false);
+	
+	if (HasAuthority()) OnTakeAnyDamage.AddDynamic(this, &ASCharacter::ReceiveDamage);
+}
+
 void ASCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (HasAuthority()) SpawnDefaultWeapon();
 }
 
 void ASCharacter::SpawnDefaultWeapon() const
@@ -102,25 +118,29 @@ void ASCharacter::SpawnDefaultWeapon() const
 // called on server only
 void ASCharacter::PossessedBy(AController* NewController)
 {
-	const ASPlayerController* OldController = PlayerController;
+	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, *GetNameSafe(this))
+	ASPlayerController* OldController = PlayerController;
 	Super::PossessedBy(NewController);
-	SetPlayerController(Controller, OldController);
+	SetPlayerController(NewController, OldController);
 }
 
 // called on clients only
 void ASCharacter::OnRep_Controller()
 {
-	const ASPlayerController* OldController = PlayerController;
+	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, *GetNameSafe(this))
+	ASPlayerController* OldController = PlayerController;
 	Super::OnRep_Controller();
 	SetPlayerController(Controller, OldController);
 }
 
-void ASCharacter::SetPlayerController(AController* NewController, const AController* OldController)
+void ASCharacter::SetPlayerController(AController* NewController, AController* OldController)
 {
 	ASPlayerController* NewPlayerController = Cast<ASPlayerController>(NewController);
 	if (NewPlayerController && NewPlayerController != OldController)
 	{
 		PlayerController = NewPlayerController;
+		CombatComponent->SetPlayerController(PlayerController);
+		
 		OnPlayerControllerSet.Broadcast();
 		OnPlayerControllerSet.Clear();
 	}
@@ -294,42 +314,11 @@ void ASCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 	PlayerInputComponent->BindAxis("LookUp", this, &ASCharacter::LookUp);
 }
 
-void ASCharacter::PostInitializeComponents()
-{
-	Super::PostInitializeComponents();
-	
-	if (CombatComponent)
-	{
-		CombatComponent->Character = this;
-	}
-	
-	if (BuffComponent)
-	{
-		BuffComponent->Character = this;
-		BuffComponent->SetInitialSpeeds(
-			GetCharacterMovement()->MaxWalkSpeed,
-			GetCharacterMovement()->MaxWalkSpeedCrouched
-		);
-		BuffComponent->SetInitialJumpVelocity(GetCharacterMovement()->JumpZVelocity);
-	}
-
-	if (AttachedGrenade) AttachedGrenade->SetVisibility(false);
-	
-	if (HasAuthority())
-	{
-		OnTakeAnyDamage.AddDynamic(this, &ASCharacter::ReceiveDamage);
-		SpawnDefaultWeapon();
-	}
-}
-
 void ASCharacter::Destroyed()
 {
 	Super::Destroyed();
 
-	if (EliminationBotComponent)
-	{
-		EliminationBotComponent->DestroyComponent();
-	}
+	if (EliminationBotComponent) EliminationBotComponent->DestroyComponent();
 
 	const ASGameMode* GM = Cast<ASGameMode>(UGameplayStatics::GetGameMode(this));
 	const bool bMatchNotInProgress = GM && GM->GetMatchState() != MatchState::InProgress;

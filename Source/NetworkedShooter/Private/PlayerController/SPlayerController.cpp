@@ -434,7 +434,6 @@ void ASPlayerController::SetHUDCarriedAmmo(int32 Ammo)
 
 void ASPlayerController::SetHUDGrenades(int32 Grenades)
 {
-	UE_LOG(LogTemp, Warning, TEXT("%s"), __FUNCTIONW__)
 	if (IsLocalController())
 	{
 		const FText AmmoText = FText::FromString(FString::Printf(TEXT("%d"), Grenades));

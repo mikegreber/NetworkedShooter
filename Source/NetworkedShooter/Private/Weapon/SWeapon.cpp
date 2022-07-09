@@ -12,6 +12,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Net/UnrealNetwork.h"
+#include "NetworkedShooter/NetworkedShooter.h"
 #include "PlayerController/SPlayerController.h"
 #include "Sound/SoundCue.h"
 #include "Weapon/SBulletCasing.h"
@@ -46,7 +47,7 @@ void ASWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ASWeapon, WeaponState);
-	DOREPLIFETIME(ASWeapon, Ammo);
+	// DOREPLIFETIME(ASWeapon, Ammo);
 }
 
 void ASWeapon::BeginPlay()
@@ -156,11 +157,8 @@ void ASWeapon::LocalFire(const FVector_NetQuantize& HitTarget)
 			}	
 		}
 	}
-
-	if (HasAuthority())
-	{
-		SpendRound();
-	}
+	
+	SpendRound();
 }
 
 void ASWeapon::ServerFire_Implementation(const FVector_NetQuantize& HitTarget)
@@ -320,17 +318,35 @@ void ASWeapon::OnHolstered() const
 
 void ASWeapon::SpendRound()
 {
-	AddAmmo(-1);
+	SetAmmo(Ammo - 1);
+	if (HasAuthority()) ClientSpendRound(Ammo);
+	else ++SpendRoundSequence;
+}
+
+void ASWeapon::ClientSpendRound_Implementation(int32 ServerAmmo)
+{
+	if (HasAuthority()) return;
+	
+	--SpendRoundSequence;
+	SetAmmo(ServerAmmo - SpendRoundSequence);
 }
 
 void ASWeapon::AddAmmo(int32 AmmoToAdd)
 {
-	Ammo = FMath::Clamp(Ammo + AmmoToAdd, 0, MagCapacity);
-	OnRep_Ammo();
+	SetAmmo(Ammo + AmmoToAdd);
+	ClientAddAmmo(AmmoToAdd);
 }
 
-void ASWeapon::OnRep_Ammo() const
+void ASWeapon::ClientAddAmmo_Implementation(int32 ServerAmmoToAdd)
 {
+	if (HasAuthority()) return;
+
+	SetAmmo(Ammo + ServerAmmoToAdd);
+}
+
+void ASWeapon::SetAmmo(int32 NewAmmo)
+{
+	Ammo = FMath::Clamp(NewAmmo, 0, MagCapacity);
 	OnWeaponAmmoChanged.Broadcast(Ammo);
 }
 

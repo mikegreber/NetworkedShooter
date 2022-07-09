@@ -70,7 +70,8 @@ class NETWORKEDSHOOTER_API ASWeapon : public AActor
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Firing")
 	bool bAutomatic = true;
 	
-	UPROPERTY(EditAnywhere, ReplicatedUsing=OnRep_Ammo, Category = "Weapon Properties | Firing")
+	// UPROPERTY(EditAnywhere, ReplicatedUsing=OnRep_Ammo, Category = "Weapon Properties | Firing")
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Firing")
 	int32 Ammo;
 
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Firing")
@@ -155,12 +156,17 @@ protected:
 	void OnEquipped() const;
 	void OnDropped();
 	void OnHolstered() const;
+
+	void SetAmmo(int32 NewAmmo);
 	
 	void SpendRound();
 	
-	UFUNCTION()
-	void OnRep_Ammo() const;
+	UFUNCTION(Client, Reliable)
+	void ClientSpendRound(int32 ServerAmmo);
 
+	UFUNCTION(Client, Reliable)
+	void ClientAddAmmo(int32 AmmoToAdd);
+	
 	virtual void OnRep_Owner() override;
 	
 	FVector TraceEndWithScatter(const FVector& HitTarget) const;
@@ -174,6 +180,7 @@ protected:
 
 	bool bCanFire;
 	FTimerHandle FireTimer;
+	int32 SpendRoundSequence = 0;
 	UPROPERTY() class ASCharacter* OwnerCharacter;
 	UPROPERTY() class USCombatComponent* OwnerComponent;
 	UPROPERTY() class ASPlayerController* OwnerController;

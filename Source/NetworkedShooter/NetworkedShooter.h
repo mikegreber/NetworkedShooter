@@ -11,8 +11,10 @@
 
 #ifdef WITH_EDITOR
 #define SERVER_ONLY() if (!GetOwner()->HasAuthority()) UE_LOG(LogTemp, Warning, TEXT("%s called on client, should only be called from server!"), __FUNCTIONW__)
+#define LOCALLY_CONTROLLED_ONLY(Pawn) if (!Pawn || !Pawn->IsLocallyControlled()) UE_LOG(LogTemp, Warning, TEXT("%s called on client, should only be called locally!"), __FUNCTIONW__)
 #else
 #define SERVER_ONLY() {}
+#define LOCALLY_CONTROLLED_ONLY() {}
 #endif
 
 template<typename T>
