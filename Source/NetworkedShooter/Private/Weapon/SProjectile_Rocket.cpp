@@ -5,10 +5,15 @@
 
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Character/SCharacter.h"
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/SLagCompensationComponent.h"
+#include "Library/ShooterGameplayStatics.h"
+#include "PlayerController/SPlayerController.h"
 #include "Sound/SoundCue.h"
 #include "Weapon/SRocketMovementComponent.h"
+#include "Weapon/SWeapon_Projectile.h"
 
 ASProjectile_Rocket::ASProjectile_Rocket()
 {
@@ -59,7 +64,40 @@ void ASProjectile_Rocket::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor
 {
 	if (OtherActor == GetOwner()) return;
 	
-	ExplodeDamage();
+	if (const ASCharacter* OwnerCharacter = GetInstigator<ASCharacter>())
+	{
+		if (ASPlayerController* OwnerController = OwnerCharacter->GetPlayerController())
+		{
+			if (bUseServerSideRewind)
+			{
+				if (OwnerCharacter->IsLocallyControlled())
+				{
+					if (OwnerCharacter->HasAuthority()) // shot from local server
+					{
+						ApplyDamage(this, GetActorLocation(), OtherActor, Damage, OwnerController, this, UDamageType::StaticClass());
+					}
+					else // shot from local client
+					{
+						TArray<ASCharacter*> HitCharacters;
+						UShooterGameplayStatics::GetActorsInRadius(this, GetActorLocation(), DamageOuterRadius, HitCharacters);
+					
+						OwnerCharacter->GetLagCompensationComponent()->ServerRewindHitProjectile(
+							HitCharacters,
+							TraceStart,
+							InitialVelocity,
+							OwnerController->GetServerTime() - OwnerController->GetSingleTripTime(),
+							Cast<ASWeapon_Projectile>(GetOwner())
+						);
+					}
+					
+				}
+			}
+			else if (OwnerCharacter->HasAuthority()) // no rewind shot from server
+			{
+				ApplyDamage(this, GetActorLocation(), OtherActor, Damage, OwnerController, this, UDamageType::StaticClass());
+			}
+		}
+	}
 	
 	if (ImpactParticles)
 	{

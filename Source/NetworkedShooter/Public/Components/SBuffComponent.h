@@ -18,7 +18,7 @@ public:
 	USBuffComponent();
 	// friend class ASCharacter;
 
-	void SetCharacter(class ASCharacter* AsCharacter);
+	void SetOwnerCharacter(class ASCharacter* AsCharacter);
 	
 	void Heal(float HealAmount, float HealingTime);
 

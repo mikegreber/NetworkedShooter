@@ -15,8 +15,7 @@ void USOverheadWidget::SetDisplayText(FString TextToDisplay)
 void USOverheadWidget::ShowPlayerNetRole(APawn* InPawn)
 {
 	// FString LocalRole;
-	// if (InPawn->GetController())
-	// switch(InPawn->GetController()->GetLocalRole())
+	// switch(InPawn->GetLocalRole())
 	// {
 	// case ROLE_None:
 	// 	{
@@ -42,8 +41,8 @@ void USOverheadWidget::ShowPlayerNetRole(APawn* InPawn)
 	// }
 	//
 	// FString RemoteRole;
-	// if (InPawn->GetController())
-	// switch(InPawn->GetController()->GetRemoteRole())
+	//
+	// switch(InPawn->GetRemoteRole())
 	// {
 	// case ROLE_None:
 	// 	{

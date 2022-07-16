@@ -2,23 +2,38 @@
 
 
 #include "Character/SCharacter.h"
+
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SBuffComponent.h"
 #include "Components/SCombatComponent.h"
+#include "Components/SLagCompensationComponent.h"
 #include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameMode/SGameMode.h"
+#include "GameState/SGameState.h"
 #include "HUD/SOverheadWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "Particles/ParticleSystemComponent.h"
 #include "PlayerController/SPlayerController.h"
+#include "PlayerState/SPlayerState.h"
 #include "Sound/SoundCue.h"
 #include "Weapon/SWeapon.h"
+
+#define SetupHitCapsule(map, name, mesh) \
+	UCapsuleComponent* name = CreateDefaultSubobject<UCapsuleComponent>(#name); \
+	name->SetupAttachment(mesh, #name); \
+	name->SetCollisionEnabled(ECollisionEnabled::NoCollision); \
+	name->SetCollisionProfileName("RewindCollider"); \
+	map.Emplace(FName(#name), name);
 
 ASCharacter::ASCharacter()
 {
@@ -48,6 +63,8 @@ ASCharacter::ASCharacter()
 	BuffComponent = CreateDefaultSubobject<USBuffComponent>("BuffComponent");
 	BuffComponent->SetIsReplicated(true);
 
+	LagCompensationComponent = CreateDefaultSubobject<USLagCompensationComponent>("LagCompensationComponent");
+
 	DissolveTimeline = CreateDefaultSubobject<UTimelineComponent>(TEXT("DissolveTimelineComponent"));
 
 	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
@@ -66,7 +83,27 @@ ASCharacter::ASCharacter()
 	AttachedGrenade->SetupAttachment(GetMesh(), "GrenadeSocket");
 	AttachedGrenade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	AttachedGrenade->SetVisibility(false);
-}
+	
+	// hit boxes for server side rewind
+	SetupHitCapsule(RewindCapsules, head, GetMesh());
+	SetupHitCapsule(RewindCapsules, pelvis, GetMesh());
+	SetupHitCapsule(RewindCapsules, spine_02, GetMesh());
+	SetupHitCapsule(RewindCapsules, spine_03, GetMesh());
+	SetupHitCapsule(RewindCapsules, upperarm_l, GetMesh());
+	SetupHitCapsule(RewindCapsules, upperarm_r, GetMesh());
+	SetupHitCapsule(RewindCapsules, lowerarm_l, GetMesh());
+	SetupHitCapsule(RewindCapsules, lowerarm_r, GetMesh());
+	SetupHitCapsule(RewindCapsules, hand_l, GetMesh());
+	SetupHitCapsule(RewindCapsules, hand_r, GetMesh());
+	SetupHitCapsule(RewindCapsules, backpack, GetMesh());
+	SetupHitCapsule(RewindCapsules, blanket, GetMesh()); blanket->SetupAttachment(GetMesh(), "backpack");
+	SetupHitCapsule(RewindCapsules, thigh_l, GetMesh());
+	SetupHitCapsule(RewindCapsules, thigh_r, GetMesh());
+	SetupHitCapsule(RewindCapsules, calf_l, GetMesh());
+	SetupHitCapsule(RewindCapsules, calf_r, GetMesh());
+	SetupHitCapsule(RewindCapsules, foot_l, GetMesh());
+	SetupHitCapsule(RewindCapsules, foot_r, GetMesh())
+}	
 
 void ASCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -76,6 +113,7 @@ void ASCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(ASCharacter, bDisableGameplay);
 	DOREPLIFETIME(ASCharacter, Health);
 	DOREPLIFETIME(ASCharacter, Shield);
+	DOREPLIFETIME(ASCharacter, bIsServerControlled);
 }
 
 void ASCharacter::PostInitializeComponents()
@@ -84,17 +122,24 @@ void ASCharacter::PostInitializeComponents()
 	
 	if (CombatComponent) CombatComponent->SetOwnerCharacter(this);
 	
-	if (BuffComponent) BuffComponent->SetCharacter(this);
+	if (BuffComponent) BuffComponent->SetOwnerCharacter(this);
+
+	if (LagCompensationComponent) LagCompensationComponent->SetOwnerCharacter(this);
 	
 	if (AttachedGrenade) AttachedGrenade->SetVisibility(false);
 	
 	if (HasAuthority()) OnTakeAnyDamage.AddDynamic(this, &ASCharacter::ReceiveDamage);
 }
 
+
+
 void ASCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	SetPlayerState(GetPlayerState());
+	SetGameState(GetWorld()->GetGameState());
+	
 	if (HasAuthority()) SpawnDefaultWeapon();
 }
 
@@ -115,34 +160,115 @@ void ASCharacter::SpawnDefaultWeapon() const
 	}
 }
 
+void ASCharacter::MulticastGainedTheLead_Implementation()
+{
+	if (CrownSystem)
+	{
+		if (!CrownComponent)
+		{
+			CrownComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+				CrownSystem,
+				GetMesh(),
+				FName("Crown"),
+				FVector(0.f,0.f,0.f),
+				FRotator::ZeroRotator,
+				EAttachLocation::SnapToTarget,
+				false
+			);
+		}
+
+		if (CrownComponent)
+		{
+			CrownComponent->Activate();
+		}
+	}
+	
+}
+
+void ASCharacter::MulticastLostTheLead_Implementation()
+{
+	if (CrownComponent)
+	{
+		CrownComponent->DestroyComponent();
+	}
+}
+
 // called on server only
 void ASCharacter::PossessedBy(AController* NewController)
 {
 	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, *GetNameSafe(this))
-	ASPlayerController* OldController = PlayerController;
+	ASPlayerController* OldController = ShooterPlayerController;
 	Super::PossessedBy(NewController);
 	SetPlayerController(NewController, OldController);
+	SetPlayerState(GetPlayerState());
 }
 
 // called on clients only
 void ASCharacter::OnRep_Controller()
 {
 	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, *GetNameSafe(this))
-	ASPlayerController* OldController = PlayerController;
+	ASPlayerController* OldController = ShooterPlayerController;
 	Super::OnRep_Controller();
 	SetPlayerController(Controller, OldController);
+	SetPlayerState(GetPlayerState());
 }
 
 void ASCharacter::SetPlayerController(AController* NewController, AController* OldController)
 {
-	ASPlayerController* NewPlayerController = Cast<ASPlayerController>(NewController);
-	if (NewPlayerController && NewPlayerController != OldController)
+	ShooterPlayerController = Cast<ASPlayerController>(NewController);
+	if (ShooterPlayerController != OldController)
 	{
-		PlayerController = NewPlayerController;
-		CombatComponent->SetPlayerController(PlayerController);
 		
-		OnPlayerControllerSet.Broadcast();
+		CombatComponent->SetPlayerController(ShooterPlayerController);
+		LagCompensationComponent->SetPlayerController(ShooterPlayerController);
+
+		bIsServerControlled = ShooterPlayerController && ShooterPlayerController->HasLocalAuthority();
+		
+		OnPlayerControllerSet.Broadcast(ShooterPlayerController);
 		OnPlayerControllerSet.Clear();
+	}
+}
+
+void ASCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+	SetPlayerState(GetPlayerState());
+}
+
+void ASCharacter::CheckLead()
+{
+	if (ShooterPlayerState && GameState)
+	{
+		if (GameState->TopScoringPlayers.Contains(ShooterPlayerState))
+		{
+			MulticastGainedTheLead();
+		}
+	}
+}
+
+void ASCharacter::SetPlayerState(APlayerState* NewPlayerState)
+{
+	const ASPlayerState* OldPlayerState = ShooterPlayerState;
+	ShooterPlayerState = Cast<ASPlayerState>(NewPlayerState);
+	if (ShooterPlayerState && ShooterPlayerState != OldPlayerState)
+	{
+		CheckLead();
+		OnPlayerStateSet.Broadcast(ShooterPlayerState);
+		OnPlayerStateSet.Clear();
+	}
+}
+
+void ASCharacter::SetGameState(AGameStateBase* NewGameState)
+{
+	GameState = Cast<ASGameState>(NewGameState);
+	if (GameState)
+	{
+		GetWorld()->GameStateSetEvent.RemoveAll(this);
+		CheckLead();
+	}
+	else
+	{
+		GetWorld()->GameStateSetEvent.AddUObject(this, &ASCharacter::SetGameState);
 	}
 }
 
@@ -188,50 +314,19 @@ void ASCharacter::OnRep_ReplicateMovement()
 	TimeSinceLastMovementReplication = 0.f;
 }
 
-void ASCharacter::Eliminated()
+void ASCharacter::Eliminated(bool bPlayerLeftGame)
 {
 	SERVER_ONLY();
-	
-	// drop weapons
-	if (CombatComponent)
-	{
-		if (CombatComponent->EquippedWeapon)
-		{
-			if (CombatComponent->EquippedWeapon->bDestroyWeaponOnKilled)
-			{
-				CombatComponent->EquippedWeapon->Destroy();
-			}
-			else
-			{
-				CombatComponent->EquippedWeapon->Drop();
-			}
-		}
-		if (CombatComponent->SecondaryWeapon)
-		{
-			if (CombatComponent->SecondaryWeapon->bDestroyWeaponOnKilled)
-			{
-				CombatComponent->SecondaryWeapon->Destroy();
-			}
-			else
-			{
-				CombatComponent->SecondaryWeapon->Drop();
-			}
-		}
-	}
-	
-	MulticastEliminated();
-	
-	GetWorldTimerManager().SetTimer(
-		EliminatedTimer, 
-		this,
-		&ASCharacter::EliminatedTimerFinished,
-		EliminatedDelay
-	);
+
+	OnEliminated.Broadcast();
+	MulticastEliminated(bPlayerLeftGame);
 }
 
-void ASCharacter::MulticastEliminated_Implementation()
+void ASCharacter::MulticastEliminated_Implementation(bool bPlayerLeftGame)
 {
+	bLeftGame = bPlayerLeftGame;
 	bEliminated = true;
+	
 	PlayEliminatedMontage();
 
 	// start dissolve effect
@@ -265,7 +360,6 @@ void ASCharacter::MulticastEliminated_Implementation()
 			GetActorRotation()
 		);
 	}
-	
 	if (EliminationBotSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(
@@ -283,13 +377,29 @@ void ASCharacter::MulticastEliminated_Implementation()
 	{
 		ShowSniperScopeWidget(false);
 	}
+
+	if (CrownComponent)
+	{
+		CrownComponent->DestroyComponent();
+	}
+
+	GetWorldTimerManager().SetTimer(
+		EliminatedTimer, 
+		this,
+		&ASCharacter::EliminatedTimerFinished,
+		EliminatedDelay
+	);
 }
 
 void ASCharacter::EliminatedTimerFinished()
 {
-	if (ASGameMode* GameMode = GetWorld()->GetAuthGameMode<ASGameMode>())
+	if (ASGameMode* GameMode = GetWorld()->GetAuthGameMode<ASGameMode>(); GameMode && !bLeftGame)
 	{
 		GameMode->RequestRespawn(this, Controller);
+	}
+	if (bLeftGame && IsLocallyControlled())
+	{
+		OnLeftGame.Broadcast();
 	}
 }
 
@@ -408,9 +518,7 @@ void ASCharacter::PlayThrowGrenadeMontage()
 {
 	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance(); AnimInstance && ThrowGrenadeMontage)
 	{
-		
-		float test = AnimInstance->Montage_Play(ThrowGrenadeMontage);
-		UE_LOG(LogTemp, Warning, TEXT("Playing Montage %f %s"), test, *GetNameSafe(ThrowGrenadeMontage));
+		AnimInstance->Montage_Play(ThrowGrenadeMontage);
 	}
 }
 
@@ -670,7 +778,7 @@ void ASCharacter::OnKilled(AController* InstigatorController)
 	{
 		GameMode->PlayerEliminated(
 			this,
-			PlayerController,
+			ShooterPlayerController,
 			Cast<ASPlayerController>(InstigatorController)
 		);
 	}
@@ -780,6 +888,18 @@ void ASCharacter::StartDissolve()
 	{
 		DissolveTimeline->AddInterpFloat(DissolveCurve, DissolveTrack);
 		DissolveTimeline->Play();
+	}
+}
+
+
+
+void ASCharacter::ServerLeaveGame_Implementation()
+{
+	ASGameMode* GameMode = GetWorld()->GetAuthGameMode<ASGameMode>();
+	
+	if (GameMode && ShooterPlayerState)
+	{
+		GameMode->PlayerLeftGame(ShooterPlayerState);
 	}
 }
 

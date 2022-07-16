@@ -12,6 +12,8 @@ UCLASS()
 class NETWORKEDSHOOTER_API ASPlayerState : public APlayerState
 {
 	GENERATED_BODY()
+
+	friend class ASPlayerController;
 	
 	UPROPERTY(ReplicatedUsing=OnRep_Kills)
 	int32 Kills;
@@ -20,15 +22,16 @@ class NETWORKEDSHOOTER_API ASPlayerState : public APlayerState
 	int32 Deaths;
 
 	UPROPERTY()
-	class ASPlayerController* Controller;
-	
+	class ASPlayerController* PlayerController;
+
+	UPROPERTY(Replicated)
+	bool bHasHighPing;
+
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	UFUNCTION()
 	void OnPlayerHUDCreated(class ASHUD* HUD);
 	virtual void SetOwner(AActor* NewOwner) override;
-	
-	// void UpdateHUD() const;
 	
 	void AddToKills(int32 KillsAmount);
 	void UpdateKills() const;
@@ -45,6 +48,8 @@ public:
 
 	FORCEINLINE int32 GetKills() const { return Kills; }
 	FORCEINLINE int32 GetDeaths() const { return Deaths; }
+	FORCEINLINE bool HasHighPing() const { return bHasHighPing; }
+	
 protected:
 	virtual void BeginPlay() override;
 private:

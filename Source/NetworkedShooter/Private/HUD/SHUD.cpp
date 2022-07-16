@@ -2,23 +2,34 @@
 
 
 #include "HUD/SHUD.h"
-
 #include "Components/TextBlock.h"
 #include "HUD/SAnnouncementWidget.h"
 #include "HUD/SCharacterOverlay.h"
+#include "HUD/SEliminationAnnouncementWidget.h"
 
 void ASHUD::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	// UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *GetNameSafe(this));
-
 }
 
 void ASHUD::Initialize()
 {
 	CreateAnnouncement();
 	CreateOverlay();
+}
+
+void ASHUD::AddEliminationAnnouncement(FString Attacker, FString Victim)
+{
+	APlayerController* OwningPlayer = GetOwningPlayerController();
+	if (OwningPlayer && EliminationAnnouncementClass)
+	{
+		EliminationAnnouncement = CreateWidget<USEliminationAnnouncementWidget>(OwningPlayer, EliminationAnnouncementClass);
+		if (EliminationAnnouncement)
+		{
+			EliminationAnnouncement->SetEliminationAnnouncementText(Attacker, Victim);
+			EliminationAnnouncement->AddToViewport();
+		}
+	}
 }
 
 void ASHUD::CreateAnnouncement()

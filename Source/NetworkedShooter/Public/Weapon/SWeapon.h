@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "SWeaponTypes.h"
+#include "Character/SCharacter.h"
 #include "Types/CustomDepth.h"
 #include "Types/HUDPackage.h"
 #include "GameFramework/Actor.h"
@@ -36,6 +37,16 @@ UCLASS(Abstract)
 class NETWORKEDSHOOTER_API ASWeapon : public AActor
 {
 	GENERATED_BODY()
+
+public:
+
+#if WITH_EDITOR
+	static TAutoConsoleVariable<int32> CVarDebugWeaponTrace;
+#endif
+	
+	friend class USLagCompensationComponent;
+
+private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Weapon Properties | Components")
 	USkeletalMeshComponent* WeaponMesh;
@@ -70,7 +81,6 @@ class NETWORKEDSHOOTER_API ASWeapon : public AActor
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Firing")
 	bool bAutomatic = true;
 	
-	// UPROPERTY(EditAnywhere, ReplicatedUsing=OnRep_Ammo, Category = "Weapon Properties | Firing")
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Firing")
 	int32 Ammo;
 
@@ -97,6 +107,9 @@ class NETWORKEDSHOOTER_API ASWeapon : public AActor
 
 protected:
 	
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Damage")
+	float Damage = 20.f;
+	
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Weapon Scatter")
 	bool bUseScatter = false;
 	
@@ -105,6 +118,28 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Weapon Scatter", meta = (EditCondition = "bUseScatter"))
 	float SphereRadius = 75.f;
+
+private:
+	
+	UPROPERTY(Replicated, EditAnywhere, Category = "Weapon Properties | Replication")
+	bool bUseServerSideRewind = true;
+
+public:
+	
+	FOnWeaponAmmoChanged OnWeaponAmmoChanged;
+
+	bool bDestroyWeaponOnKilled = false;
+	
+protected:
+	
+	bool bCanFire;
+	FTimerHandle FireTimer;
+	int32 LocalAmmoDelta = 0;
+	
+	UPROPERTY() class ASCharacter* OwnerCharacter;
+	UPROPERTY() class USCombatComponent* OwnerComponent;
+	UPROPERTY() class ASPlayerController* OwnerController;
+	UPROPERTY() class ASPlayerState* OwnerPlayerState;
 	
 public:
 	
@@ -120,17 +155,11 @@ public:
 	
 	void Drop();
 
-	void AddAmmo(int32 AmmoToAdd);
+	void AddAmmo(int16 AmmoToAdd);
 	
 	void Holster();
-
-	bool IsLocallyControlled() const;
 	
 	void ShowPickupWidget(bool bShowWidget) const;
-
-	FOnWeaponAmmoChanged OnWeaponAmmoChanged;
-
-	bool bDestroyWeaponOnKilled = false;
 
 protected:
 	
@@ -138,13 +167,19 @@ protected:
 
 	bool CanFire() const;
 	
-	virtual void LocalFire(const FVector_NetQuantize& HitTarget);
+	virtual void LocalFire(const FTransform& MuzzleTransform, const FVector_NetQuantize& HitTarget, bool bIsRewindFire = false, int8 Seed = 0);
 	
 	UFUNCTION(Server, Reliable)
 	virtual void ServerFire(const FVector_NetQuantize& HitTarget);
 
 	UFUNCTION(NetMulticast, Reliable)
 	virtual void MulticastFire(const FVector_NetQuantize& HitTarget);
+
+	UFUNCTION(Server, Reliable)
+	void ServerFireWithSeed(const FVector_NetQuantize& HitTarget, int8 Seed);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastFireWithSeed(const FVector_NetQuantize& HitTarget, int8 Seed);
 
 	void StartFireTimer();
 	
@@ -156,16 +191,16 @@ protected:
 	void OnEquipped() const;
 	void OnDropped();
 	void OnHolstered() const;
-
+	
+	UFUNCTION(Client, Reliable)
+	void ClientAddAmmo(int16 ServerAmmo, int16 ServerChangeAmount);
 	void SetAmmo(int32 NewAmmo);
-	
-	void SpendRound();
-	
-	UFUNCTION(Client, Reliable)
-	void ClientSpendRound(int32 ServerAmmo);
 
-	UFUNCTION(Client, Reliable)
-	void ClientAddAmmo(int32 AmmoToAdd);
+	UFUNCTION()
+	void SetPlayerState(ASPlayerState* NewPlayerState);
+
+	UFUNCTION()
+	void SetPlayerController(ASPlayerController* GetController);
 	
 	virtual void OnRep_Owner() override;
 	
@@ -177,16 +212,18 @@ protected:
 
 	UFUNCTION()
 	void OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
-
-	bool bCanFire;
-	FTimerHandle FireTimer;
-	int32 SpendRoundSequence = 0;
-	UPROPERTY() class ASCharacter* OwnerCharacter;
-	UPROPERTY() class USCombatComponent* OwnerComponent;
-	UPROPERTY() class ASPlayerController* OwnerController;
+	
+	bool CanUseServerSideRewind() const;
 
 public:
 	
+	FORCEINLINE bool IsLocallyControlled() const { return OwnerCharacter->IsLocallyControlled(); }
+	FORCEINLINE bool IsServerControlled() const { return OwnerCharacter->IsServerControlled(); }
+	FORCEINLINE bool IsAutomatic() const { return bAutomatic; }
+	FORCEINLINE bool IsEmpty() const { return Ammo <= 0; }
+	FORCEINLINE bool IsFull() const { return Ammo == MagCapacity; };
+	FORCEINLINE int32 GetAmmo() const { return Ammo; }
+	FORCEINLINE int32 GetMagCapacity() const { return MagCapacity; }
 	FORCEINLINE USphereComponent* GetSphereComponent() const { return SphereComponent; }
 	FORCEINLINE USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
 	FORCEINLINE EWeaponType GetWeaponType() const { return WeaponType; }
@@ -195,10 +232,6 @@ public:
 	FORCEINLINE float GetZoomFOV() const { return ZoomFOV; }
 	FORCEINLINE float GetZoomInterpSpeed() const { return ZoomInterpSpeed; }
 	FORCEINLINE float GetFireDelay() const { return FireDelay; }
-	FORCEINLINE bool IsAutomatic() const { return bAutomatic; }
-	FORCEINLINE bool IsEmpty() const { return Ammo <= 0; }
-	FORCEINLINE bool IsFull() const { return Ammo == MagCapacity; };
-	FORCEINLINE int32 GetAmmo() const { return Ammo; }
-	FORCEINLINE int32 GetMagCapacity() const { return MagCapacity; }
-
+	FORCEINLINE float GetDamage() const { return Damage; }
+	
 };

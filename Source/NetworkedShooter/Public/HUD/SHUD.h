@@ -37,7 +37,8 @@ public:
 	class USAnnouncementWidget* Announcement;
 
 	void Initialize();
-	
+
+	void AddEliminationAnnouncement(FString Attacker, FString Victim);
 	
 	void ShowAnnouncement(bool bShowAnnouncement);
 
@@ -59,6 +60,11 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	float CrosshairSpreadMax = 16.f;
+
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<class USEliminationAnnouncementWidget> EliminationAnnouncementClass;
+	UPROPERTY() USEliminationAnnouncementWidget* EliminationAnnouncement;
+	
 public:
 	FORCEINLINE void SetHUDPackage(const FHUDPackage& Package) { HUDPackage = Package; }
 };

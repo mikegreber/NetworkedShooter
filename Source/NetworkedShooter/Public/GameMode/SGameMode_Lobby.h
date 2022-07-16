@@ -12,6 +12,8 @@ class NETWORKEDSHOOTER_API ASGameMode_Lobby : public AGameMode
 	GENERATED_BODY()
 
 public:
+	void StartGame();
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
+	
 };

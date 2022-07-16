@@ -10,12 +10,16 @@ UCLASS()
 class NETWORKEDSHOOTER_API ASWeapon_Projectile : public ASWeapon
 {
 	GENERATED_BODY()
-
 protected:
-	
+
 	UPROPERTY(EditAnywhere, Category = "WeaponProperties | Projectile")
 	TSubclassOf<class ASProjectile> ProjectileClass;
 	
-	virtual void LocalFire(const FVector_NetQuantize& HitTarget) override;
+	UPROPERTY(EditAnywhere, Category = "WeaponProperties | Projectile")
+	TSubclassOf<ASProjectile> ServerSideRewindProjectileClass;
+	
+	virtual void LocalFire(const FTransform& MuzzleTransform, const FVector_NetQuantize& HitTarget, bool bIsRewindFire = false, int8 Seed = 0) override;
 
+public:
+	FORCEINLINE TSubclassOf<ASProjectile> GetProjectileClass() const { return ProjectileClass; }
 };

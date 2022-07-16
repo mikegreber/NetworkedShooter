@@ -7,58 +7,84 @@
 #include "SPlayerController.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnHUDCreated);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHighPingUpdated, bool, bHighPing);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerStateSet, class ASPlayerState*, NewPlayerState);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameStateSet, class ASGameState*, NewGameState);
 
 UCLASS()
 class NETWORKEDSHOOTER_API ASPlayerController : public APlayerController
 {
 	GENERATED_BODY()
 
+	UPROPERTY(EditAnywhere, Category = "Network")
+	float TimeSyncFrequency = 5.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Network")
+	float HighPingDuration = 5.f;
+
+	UPROPERTY(EditAnywhere, Category = "Network")
+	float CheckPingFrequency = 20.f;
+
+	UPROPERTY(EditAnywhere, Category = "Network")
+	float HighPingThreshold = 50.f;
+
+	UPROPERTY(EditAnywhere, Category = "Menu")
+	TSubclassOf<class USReturnToMainMenuWidget> ReturnToMainMenuWidget;
+
+	UPROPERTY()
+	USReturnToMainMenuWidget* ReturnToMainMenuWidgetInstance;
+
+	bool bReturnToMainMenuOpen = false;
+	
 public:
+
+	FOnHighPingUpdated OnHighPingUpdated;
+	FOnPlayerStateSet OnPlayerStateSet;
+	FOnGameStateSet OnGameStateSet;
 
 	ASPlayerController();
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
 	virtual void InitPlayerState() override;
 	virtual void OnRep_PlayerState() override;
 	virtual void CleanupPlayerState() override;
+	void SetPlayerState(APlayerState* NewPlayerState);
 	virtual void OnRep_Pawn() override;
-
+	virtual void ReceivedPlayer() override;
 	virtual void Tick(float DeltaSeconds) override;
-
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	bool HasLocalAuthority() const;
+	bool HasLowPing() const;
 
 	void OnMatchStateSet(FName State);
 
-	UFUNCTION()
-	void SetHUDHealth(float Health, float MaxHealth);
+	// synced with server world clock
+	float GetServerTime() const;
 
-	UFUNCTION()
-	void SetHUDShield(float Shield, float MaxShield);
+	UFUNCTION() void SetHUDHealth(float Health, float MaxHealth);
+	UFUNCTION() void SetHUDShield(float Shield, float MaxShield);
+	UFUNCTION() void SetHUDKills(int32 Score);
+	UFUNCTION() void SetHUDDeaths(int32 Deaths);
+	UFUNCTION() void SetHUDWeaponAmmo(int32 Ammo);
+	UFUNCTION() void SetHUDCarriedAmmo(int32 Ammo);
+	UFUNCTION() void SetHUDGrenades(int32 Grenades);
 	
-	UFUNCTION()
-	void SetHUDKills(int32 Score);
-
-	UFUNCTION()
-	void SetHUDDeaths(int32 Deaths);
-
-	UFUNCTION()
-	void SetHUDWeaponAmmo(int32 Ammo);
-
-	UFUNCTION()
-	void SetHUDCarriedAmmo(int32 Ammo);
-
-	UFUNCTION()
-	void SetHUDGrenades(int32 Grenades);
+	void BroadcastElimination(APlayerState* Attacker, APlayerState* Victim);
 
 protected:
-	
+	virtual void SetupInputComponent() override;
 	virtual void BeginPlay() override;
-
 	virtual void OnPossess(APawn* NewPawn) override;
 	virtual void OnUnPossess() override;
+
+	void ShowReturnToMainMenu();
+
+	void SyncServerTime();
+	UFUNCTION(Client, Reliable)
+	void ClientReportServerTime(float ClientRequestTime, float ServerTime);
+	UFUNCTION(Server, Reliable)
+	void ServerRequestServerTime(float ClientRequestTime);
 
 	void HandleMatchHasStarted();
 	void HandleCooldown();
@@ -68,42 +94,26 @@ protected:
 	
 	UFUNCTION()
 	void PlayerStateHUDInit();
-	
-	// synced with server world clock
-	float GetServerTime() const;
 
-	void HighPingWarning();
+	void DisplayHighPingWarning();
+	
 	void StopHighPingWarning();
+
+	UFUNCTION(Client, Reliable)
+	void ClientEliminationAnnouncement(APlayerState* Attacker, APlayerState* Victim);
 	
 private:
-	void InitGameStateAndTick();
+	
+	void InitHUD();
 
+	void SetGameState(AGameStateBase* GetGameState);
+	
 	void SetHUDTime();
 
 	UFUNCTION()
 	void SetHUDMatchCountdown(float CountdownTime) const;
-	void SetHUDAnnouncementCountdown(float CountdownTime);
 	
-	UPROPERTY()
-	class ASHUD* HUD;
-
-	UPROPERTY()
-	AGameStateBase* GameState;
-
-	UPROPERTY()
-	class ASGameMode* GameMode;
-
-	float LevelStartingTime = 0.f;
-	float MatchTime = 0.f;
-	float WarmupTime = 0.f;
-	float CooldownTime = 0.f;
-	uint32 CountdownInt;
-	FOnHUDCreated OnHUDInitialized;
-	FDelegateHandle GameStateSetDelegateHandle;
-	FDelegateHandle OnNewPawnDelegateHandle;
-
-	UPROPERTY(ReplicatedUsing=OnRep_MatchState)
-	FName MatchState;
+	void SetHUDAnnouncementCountdown(float CountdownTime);
 
 	UFUNCTION(Server, Reliable)
 	void ServerCheckMatchState();
@@ -114,17 +124,39 @@ private:
 	UFUNCTION()
 	void OnRep_MatchState();
 	
-	UPROPERTY(EditAnywhere, Category = "Network")
-	float HighPingDuration = 5.f;
-
-	UPROPERTY(EditAnywhere, Category = "Network")
-	float CheckPingFrequency = 20.f;
-
-	UPROPERTY(EditAnywhere, Category = "Network")
-	float HighPingThreshold = 50.f;
-	
 	void CheckPing();
 
+	UFUNCTION(Server, Reliable)
+	void ServerReportHighPing(bool bHighPing);
+	
+	UPROPERTY() class ASHUD* HUD;
+	UPROPERTY() class ASGameState* GameState;
+	UPROPERTY() class ASGameMode* GameMode;
+	UPROPERTY() class ASPlayerState* ShooterPlayerState;
+
+	UPROPERTY(ReplicatedUsing=OnRep_MatchState)
+	FName MatchState;
+
+	UPROPERTY(Replicated)
+	bool bHasHighPing;
+	
+	float SingleTripTime = 0.f;
+	float ClientServerDelta = 0.f;
+	float LevelStartingTime = 0.f;
+	float MatchTime = 0.f;
+	float WarmupTime = 0.f;
+	float CooldownTime = 0.f;
+	uint32 CountdownInt;
+	FOnHUDCreated OnHUDInitialized;
+	FDelegateHandle GameStateSetDelegateHandle;
+	FDelegateHandle OnNewPawnDelegateHandle;
+
+public:
+	FORCEINLINE float GetSingleTripTime() const { return SingleTripTime; };
 };
 
 
+FORCEINLINE float ASPlayerController::GetServerTime() const
+{
+	return HasAuthority() ? GetWorld()->GetTimeSeconds() : GetWorld()->GetTimeSeconds() + ClientServerDelta;
+}

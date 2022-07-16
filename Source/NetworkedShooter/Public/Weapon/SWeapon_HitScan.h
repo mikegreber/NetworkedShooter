@@ -14,9 +14,6 @@ class NETWORKEDSHOOTER_API ASWeapon_HitScan : public ASWeapon
 
 protected:
 	
-	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Damage")
-	float Damage = 20.f;
-	
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Effects | Firing")
 	UParticleSystem* ImpactParticles;
 
@@ -31,8 +28,16 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Effects | Firing")
 	USoundCue* HitSound;
-	
-	virtual void LocalFire(const FVector_NetQuantize& HitTarget) override;
 
-	void WeaponTraceHit(const FVector& TraceStart, const FVector& HitTarget, FHitResult& OutHit) const;
+	virtual void LocalFire(const FTransform& MuzzleTransform, const FVector_NetQuantize& HitTarget, bool bIsRewindFire, int8 Seed) override;
+
+	void WeaponTraceHit(const FVector& TraceStart, const FVector& HitTarget, FHitResult& OutHit, ECollisionChannel CollisionChannel = ECC_Visibility) const;
+
+	void ApplyDamage(ASCharacter* HitCharacter);
+	
+	void ServerRewind(ASCharacter* HitCharacter, const FVector& TraceStart, const FVector_NetQuantize& HitTarget);
+
+private:
+	
+	void PlayFireEffects(const FTransform& MuzzleTransform, const FHitResult& FireHit);
 };

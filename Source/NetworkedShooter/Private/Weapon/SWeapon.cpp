@@ -14,8 +14,13 @@
 #include "Net/UnrealNetwork.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "PlayerController/SPlayerController.h"
+#include "PlayerState/SPlayerState.h"
 #include "Sound/SoundCue.h"
 #include "Weapon/SBulletCasing.h"
+
+#if WITH_EDITOR
+TAutoConsoleVariable<int32> ASWeapon::CVarDebugWeaponTrace(TEXT("ns.weapon.tracehit"), 0, TEXT("Debug WeaponTraceHit"), ECVF_Cheat);
+#endif
 
 ASWeapon::ASWeapon()
 {
@@ -39,6 +44,7 @@ ASWeapon::ASWeapon()
 	PickupWidget->SetupAttachment(RootComponent);
 
 	bReplicates = true;
+	bNetUseOwnerRelevancy = true;
 	SetReplicateMovement(true);
 }
 
@@ -47,7 +53,7 @@ void ASWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ASWeapon, WeaponState);
-	// DOREPLIFETIME(ASWeapon, Ammo);
+	DOREPLIFETIME_CONDITION(ASWeapon, bUseServerSideRewind, COND_OwnerOnly);
 }
 
 void ASWeapon::BeginPlay()
@@ -72,23 +78,11 @@ void ASWeapon::OnRep_Owner()
 	{
 		OwnerCharacter = Cast<ASCharacter>(Owner);
 		OwnerComponent = OwnerCharacter->GetCombatComponent();
-		OwnerController = OwnerCharacter->GetPlayerController();
-		if (OwnerController == nullptr)
-		{
-			// call again when controller is set in owner character
-			OwnerCharacter->OnPlayerControllerSet.AddUObject(this, &ASWeapon::OnRep_Owner);
-			return;
-		}
-
-		// make sure all references are set before firing
-		bCanFire = OwnerCharacter && OwnerComponent && OwnerController;
+		SetPlayerState(OwnerCharacter->GetPlayerState<ASPlayerState>());
+		SetPlayerController(OwnerCharacter->GetController<ASPlayerController>());
 		
-		// bind UI delegates for local player
-		if (IsLocallyControlled())
-		{
-			OnWeaponAmmoChanged.AddUniqueDynamic(OwnerController, &ASPlayerController::SetHUDWeaponAmmo);
-			OnWeaponAmmoChanged.Broadcast(Ammo);
-		}
+		// make sure all references are set before firing
+		bCanFire = OwnerCharacter && OwnerComponent && OwnerController && OwnerPlayerState;
 	}
 	else
 	{
@@ -103,6 +97,7 @@ void ASWeapon::OnRep_Owner()
 		OwnerCharacter = nullptr;
 		OwnerController = nullptr;
 		OwnerComponent = nullptr;
+		OwnerPlayerState = nullptr;
 
 		GetWorldTimerManager().ClearAllTimersForObject(this);
 		
@@ -110,9 +105,44 @@ void ASWeapon::OnRep_Owner()
 	}
 }
 
-bool ASWeapon::IsLocallyControlled() const
+void ASWeapon::SetPlayerState(ASPlayerState* NewPlayerState)
 {
-	return OwnerController && OwnerController->IsLocalController();
+	OwnerPlayerState = NewPlayerState;
+	if (OwnerPlayerState)
+	{
+		// make sure all references are set before firing
+		bCanFire = OwnerCharacter && OwnerComponent && OwnerController && OwnerPlayerState;
+	}
+	else
+	{
+		if (OwnerCharacter) OwnerCharacter->OnPlayerStateSet.AddUniqueDynamic(this, &ASWeapon::SetPlayerState);
+	}
+}
+
+void ASWeapon::SetPlayerController(ASPlayerController* NewController)
+{
+	OwnerController = NewController;
+	if (OwnerController)
+	{
+		// bind UI delegates for local player
+		if (IsLocallyControlled())
+		{
+			OnWeaponAmmoChanged.AddUniqueDynamic(OwnerController, &ASPlayerController::SetHUDWeaponAmmo);
+			OnWeaponAmmoChanged.Broadcast(Ammo);
+		}
+		
+		// make sure all references are set before firing
+		bCanFire = OwnerCharacter && OwnerComponent && OwnerController && OwnerPlayerState;
+	}
+	else
+	{
+		if (OwnerCharacter) OwnerCharacter->OnPlayerControllerSet.AddUObject(this, &ASWeapon::SetPlayerController);
+	}
+}
+
+bool ASWeapon::CanUseServerSideRewind() const
+{
+	return bUseServerSideRewind && !OwnerPlayerState->HasHighPing();
 }
 
 bool ASWeapon::CanFire() const
@@ -127,38 +157,47 @@ void ASWeapon::Fire(FVector_NetQuantize HitTarget)
 		bCanFire = false;
 	
 		if (bUseScatter) HitTarget = TraceEndWithScatter(HitTarget);
-	
-		LocalFire(HitTarget);
+
+		LocalFire(GetWeaponMesh()->GetSocketTransform("MuzzleFlash"), HitTarget);
 		ServerFire(HitTarget);
 	
 		StartFireTimer();
 	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("CanFire Failed"))
+	}
 }
 
-void ASWeapon::LocalFire(const FVector_NetQuantize& HitTarget)
+void ASWeapon::LocalFire(const FTransform& MuzzleTransform, const FVector_NetQuantize& HitTarget, bool bIsRewindFire, int8 Seed)
 {
-	if (FireAnimation)
+	if (!bIsRewindFire)
 	{
-		WeaponMesh->PlayAnimation(FireAnimation, false);
-	}
-
-	if (CasingClass)
-	{
-		if (const USkeletalMeshSocket* AmmoEjectSocket = WeaponMesh->GetSocketByName("AmmoEject"))
+		if (FireAnimation)
 		{
-			const FTransform SocketTransform = AmmoEjectSocket->GetSocketTransform(GetWeaponMesh());
-			
-			if (UWorld* World = GetWorld())
-			{
-				World->SpawnActor<ASBulletCasing>(
-					CasingClass,
-					SocketTransform
-				);
-			}	
+			WeaponMesh->PlayAnimation(FireAnimation, false);
 		}
+
+		if (CasingClass)
+		{
+			if (const USkeletalMeshSocket* AmmoEjectSocket = WeaponMesh->GetSocketByName("AmmoEject"))
+			{
+				const FTransform SocketTransform = AmmoEjectSocket->GetSocketTransform(GetWeaponMesh());
+			
+				if (UWorld* World = GetWorld())
+				{
+					World->SpawnActor<ASBulletCasing>(
+						CasingClass,
+						SocketTransform
+					);
+				}	
+			}
+		}
+
+		AddAmmo(-1);
 	}
 	
-	SpendRound();
+	if (Seed != 0) FMath::RandInit(Seed);
 }
 
 void ASWeapon::ServerFire_Implementation(const FVector_NetQuantize& HitTarget)
@@ -168,7 +207,17 @@ void ASWeapon::ServerFire_Implementation(const FVector_NetQuantize& HitTarget)
 
 void ASWeapon::MulticastFire_Implementation(const FVector_NetQuantize& HitTarget)
 {
-	if ( ! IsLocallyControlled() ) LocalFire(const_cast<FVector_NetQuantize&>(HitTarget));
+	if (!IsLocallyControlled()) LocalFire(GetWeaponMesh()->GetSocketTransform("MuzzleFlash"), HitTarget);
+}
+
+void ASWeapon::ServerFireWithSeed_Implementation(const FVector_NetQuantize& HitTarget, int8 Seed)
+{
+	MulticastFireWithSeed(HitTarget, Seed);
+}
+
+void ASWeapon::MulticastFireWithSeed_Implementation(const FVector_NetQuantize& HitTarget, int8 Seed)
+{
+	if (!IsLocallyControlled()) LocalFire(GetWeaponMesh()->GetSocketTransform("MuzzleFlash"), HitTarget, false, Seed);
 }
 
 void ASWeapon::StartFireTimer()
@@ -190,10 +239,7 @@ void ASWeapon::FireTimerFinished()
 		Fire(OwnerCharacter->GetHitTarget());
 	}
 
-	if (IsEmpty())
-	{
-		OwnerComponent->ReloadWeapon();
-	}
+	if (IsEmpty()) OwnerComponent->ReloadWeapon();
 }
 
 void ASWeapon::Equip(ACharacter* Character)
@@ -316,38 +362,29 @@ void ASWeapon::OnHolstered() const
 	SetCustomDepthColor(WeaponMesh, SecondaryOutlineColor);
 }
 
-void ASWeapon::SpendRound()
-{
-	SetAmmo(Ammo - 1);
-	if (HasAuthority()) ClientSpendRound(Ammo);
-	else ++SpendRoundSequence;
-}
-
-void ASWeapon::ClientSpendRound_Implementation(int32 ServerAmmo)
-{
-	if (HasAuthority()) return;
-	
-	--SpendRoundSequence;
-	SetAmmo(ServerAmmo - SpendRoundSequence);
-}
-
-void ASWeapon::AddAmmo(int32 AmmoToAdd)
-{
-	SetAmmo(Ammo + AmmoToAdd);
-	ClientAddAmmo(AmmoToAdd);
-}
-
-void ASWeapon::ClientAddAmmo_Implementation(int32 ServerAmmoToAdd)
-{
-	if (HasAuthority()) return;
-
-	SetAmmo(Ammo + ServerAmmoToAdd);
-}
-
 void ASWeapon::SetAmmo(int32 NewAmmo)
 {
-	Ammo = FMath::Clamp(NewAmmo, 0, MagCapacity);
+	int32 Overflow;
+	Ammo = ClampWithOverflow(NewAmmo, 0, MagCapacity, Overflow);
+	if (Overflow) UE_LOG(LogTemp, Error, TEXT("%s %s Overflow! This should not happen! %d %d"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, NewAmmo, LocalAmmoDelta);
 	OnWeaponAmmoChanged.Broadcast(Ammo);
+}
+
+void ASWeapon::AddAmmo(int16 AmmoToAdd)
+{
+	SetAmmo(Ammo + AmmoToAdd);
+	if (HasAuthority()) ClientAddAmmo(Ammo, AmmoToAdd);
+	else LocalAmmoDelta += AmmoToAdd;
+}
+
+void ASWeapon::ClientAddAmmo_Implementation(int16 ServerAmmo, int16 ServerChangeAmount)
+{
+	if (HasAuthority()) return;
+
+	LocalAmmoDelta -= ServerChangeAmount;
+	
+	if (Ammo != (ServerAmmo + LocalAmmoDelta)) UE_LOG(LogTemp, Error, TEXT("Incorrect Value for Local Prediction"))
+	SetAmmo(ServerAmmo + LocalAmmoDelta);
 }
 
 FVector ASWeapon::TraceEndWithScatter(const FVector& HitTarget) const

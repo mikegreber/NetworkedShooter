@@ -52,7 +52,8 @@ void USCombatComponent::SetOwnerCharacter(ASCharacter* NewCharacter)
 	if (NewCharacter && NewCharacter != OwnerCharacter)
 	{
 		OwnerCharacter = NewCharacter;
-		
+		OwnerCharacter->OnEliminated.AddDynamic(this, &USCombatComponent::OnEliminated);
+
 		OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 		if (OwnerCharacter->GetFollowCamera())
 		{
@@ -62,6 +63,7 @@ void USCombatComponent::SetOwnerCharacter(ASCharacter* NewCharacter)
 
 		bIsLocallyControlled |= OwnerCharacter->IsLocallyControlled();
 		bHasAuthority |= OwnerCharacter->HasAuthority();
+
 		
 		OnCharacterSet.Broadcast();
 		OnCharacterSet.Clear();
@@ -221,7 +223,7 @@ void USCombatComponent::InterpFOV(float DeltaTime)
 
 bool USCombatComponent::CanFire() const
 {
-	return CombatState == ESCombatState::ECS_Unoccupied;
+	return CombatState == ESCombatState::ECS_Unoccupied && !bLocallyReloading;
 }
 
 void USCombatComponent::FireButtonPressed(bool bPressed)
@@ -332,17 +334,24 @@ void USCombatComponent::ServerSwapWeapons_Implementation()
 	}
 }
 
+bool USCombatComponent::CanReload() const
+{
+	return CarriedAmmo > 0 && CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon && !EquippedWeapon->IsFull() && !bLocallyReloading;
+}
+
 void USCombatComponent::ReloadWeapon()
 {
-	if (CarriedAmmo > 0 && CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon && !EquippedWeapon->IsFull())
+	if (CanReload())
 	{
+		bLocallyReloading = true;
+		SetCombatState(ESCombatState::ECS_Reloading);
 		ServerReloadWeapon();
 	}
 }
 
 void USCombatComponent::ServerReloadWeapon_Implementation()
 {
-	if (OwnerCharacter && EquippedWeapon)
+	if (CanReload() && !IsLocallyControlled())
 	{
 		SetCombatState(ESCombatState::ECS_Reloading);
 	}
@@ -350,20 +359,27 @@ void USCombatComponent::ServerReloadWeapon_Implementation()
 
 void USCombatComponent::FinishReloading()
 {
+	bLocallyReloading = false;
+	
+	if (!EquippedWeapon) return;
+
+	const int32 Amount = ReloadAmount();
 	if (HasAuthority())
 	{
-		CombatState = ESCombatState::ECS_Unoccupied;
-
-		if (EquippedWeapon)
+		SetCombatState(ESCombatState::ECS_Unoccupied);
+		if (CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
 		{
-			const int32 Amount = ReloadAmount();
-			if (CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
-			{
-				CarriedAmmoMap[EquippedWeapon->GetWeaponType()] -= Amount;
-				UpdateCarriedAmmo();
-			}
-			EquippedWeapon->AddAmmo(Amount);
+			CarriedAmmoMap[EquippedWeapon->GetWeaponType()] -= Amount;
+			UpdateCarriedAmmo();
 		}
+		EquippedWeapon->AddAmmo(Amount);
+	}
+	else if (IsLocallyControlled())
+	{
+		EquippedWeapon->AddAmmo(Amount);
+		
+		CarriedAmmo -= Amount;
+		OnRep_CarriedAmmo();
 	}
 	
 	if (bFireButtonPressed)
@@ -377,12 +393,8 @@ int32 USCombatComponent::ReloadAmount()
 	if (EquippedWeapon)
 	{
 		const int32 RoomInMag = EquippedWeapon->GetMagCapacity() - EquippedWeapon->GetAmmo();
-		if (CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
-		{
-			const int32 AmountCarried = CarriedAmmoMap[EquippedWeapon->GetWeaponType()];
-			const int32 Least = FMath::Min(RoomInMag, AmountCarried);
-			return FMath::Clamp(RoomInMag, 0, Least);
-		}
+		const int32 AmountCarried = HasAuthority() ? CarriedAmmoMap[EquippedWeapon->GetWeaponType()] : CarriedAmmo;
+		return FMath::Clamp(RoomInMag, 0, AmountCarried);
 	}
 	
 	return 0;
@@ -559,15 +571,17 @@ void USCombatComponent::OnRep_CarriedGrenades() const
 
 void USCombatComponent::SetCombatState(ESCombatState NewCombatState)
 {
-	if (CombatState != NewCombatState)
-	{
-		CombatState = NewCombatState;
-		OnRep_CombatState();
-	}
+	if (CombatState == NewCombatState) return;
+
+	const ESCombatState OldCombatState = CombatState;
+	CombatState = NewCombatState;
+	OnRep_CombatState(OldCombatState);
 }
 
-void USCombatComponent::OnRep_CombatState()
+void USCombatComponent::OnRep_CombatState(ESCombatState OldCombatState)
 {
+	if (CombatState == OldCombatState) return;
+	
 	switch (CombatState)
 	{
 	case ESCombatState::ECS_Unoccupied:
@@ -615,5 +629,32 @@ void USCombatComponent::AttachActorToBackpack(AActor* ActorToAttach) const
 	if (OwnerCharacter && ActorToAttach)
 	{
 		ActorToAttach->AttachToComponent(OwnerCharacter->GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "BackpackSocket");
+	}
+}
+
+void USCombatComponent::OnEliminated()
+{
+	if (EquippedWeapon)
+	{
+		if (EquippedWeapon->bDestroyWeaponOnKilled)
+		{
+			EquippedWeapon->Destroy();
+		}
+		else
+		{
+			EquippedWeapon->Drop();
+		}
+	}
+	
+	if (SecondaryWeapon)
+	{
+		if (SecondaryWeapon->bDestroyWeaponOnKilled)
+		{
+			SecondaryWeapon->Destroy();
+		}
+		else
+		{
+			SecondaryWeapon->Drop();
+		}
 	}
 }

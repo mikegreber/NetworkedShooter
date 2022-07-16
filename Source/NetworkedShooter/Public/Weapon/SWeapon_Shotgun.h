@@ -14,19 +14,22 @@ class NETWORKEDSHOOTER_API ASWeapon_Shotgun : public ASWeapon_HitScan
 {
 	GENERATED_BODY()
 
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Weapon Scatter")
+	uint32 NumberOfPellets = 10;
+	
 public:
 	virtual void Fire(FVector_NetQuantize HitTarget) override;
 	
 protected:
-	void LocalFireWithSeed(const FVector_NetQuantize& HitTarget, int8 Seed);
 	
-	UFUNCTION(Server, Reliable)
-	void ServerFireWithSeed(const FVector_NetQuantize& HitTarget, int8 Seed);
+	virtual void LocalFire(const FTransform& MuzzleTransform, const FVector_NetQuantize& HitTarget, bool bIsRewindFire, int8 Seed = 0) override;
+	
+	void ApplyDamage(const TMap<ASCharacter*, uint32>& HitMap);
+	
+	void ServerRewind(const TMap<ASCharacter*, uint32>& HitMap, const FVector& TraceStart, const FVector_NetQuantize& HitTarget, int8 Seed);
 
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastFireWithSeed(const FVector_NetQuantize& HitTarget, int8 Seed);
 private:
+	
+	void PlayFireEffects(const FTransform& MuzzleTransform, const TArray<FHitResult>& FireHits) const;
 
-	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Weapon Scatter")
-	uint32 NumberOfPellets = 10;
 };

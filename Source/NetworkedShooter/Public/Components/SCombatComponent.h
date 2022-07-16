@@ -65,6 +65,8 @@ private:
 
 	// read with IsLocallyControlled()
 	bool bIsLocallyControlled;
+
+	bool bLocallyReloading;
 	
 	bool bAimButtonPressed = false;
 	
@@ -105,7 +107,7 @@ public:
 	USCombatComponent();
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
+	
 	void SetOwnerCharacter(ASCharacter* NewCharacter);
 
 	void SetPlayerController(AController* NewController);
@@ -116,6 +118,8 @@ public:
 
 	void FireButtonPressed(bool bCond);
 
+	bool CanReload() const;
+	
 	void ReloadWeapon();
 	
 	void PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount);
@@ -185,7 +189,7 @@ protected:
 	
 	void SetCombatState(ESCombatState NewCombatState);
 	UFUNCTION()
-	void OnRep_CombatState();
+	void OnRep_CombatState(ESCombatState OldCombatState);
 	
 	void AttachActorToRightHand(AActor* ActorToAttach) const;
 	
@@ -193,6 +197,8 @@ protected:
 	
 	void AttachActorToBackpack(AActor* ActorToAttach) const;
 
+	UFUNCTION()
+	void OnEliminated();
 public:
 	FORCEINLINE bool HasAuthority() const { return bHasAuthority; }
 	FORCEINLINE bool IsLocallyControlled() const { return bIsLocallyControlled; }

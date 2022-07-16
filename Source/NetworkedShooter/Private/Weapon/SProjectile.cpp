@@ -2,13 +2,12 @@
 
 
 #include "Weapon/SProjectile.h"
-
 #include "NiagaraFunctionLibrary.h"
-#include "Character/SCharacter.h"
 #include "Components/BoxComponent.h"
+#include "GameFramework/DamageType.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "NetworkedShooter/NetworkedShooter.h"
+#include "Library/ShooterGameplayStatics.h"
 #include "Sound/SoundCue.h"
 
 ASProjectile::ASProjectile()
@@ -17,23 +16,38 @@ ASProjectile::ASProjectile()
 	bReplicates = true;
 
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
-	CollisionBox->SetCollisionObjectType(ECC_WorldDynamic);
-	CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	CollisionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-	CollisionBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-	CollisionBox->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-	CollisionBox->SetCollisionResponseToChannel(ECC_SkeletalMesh, ECR_Block);
+	CollisionBox->SetCollisionProfileName("Projectile");
+	
 	SetRootComponent(CollisionBox);
 }
+
+#if WITH_EDITOR
+void ASProjectile::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	const FName PropertyName = PropertyChangedEvent.Property->GetFName();
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(ASProjectile, InitialSpeed))
+	{
+		if (ProjectileMovementComponent)
+		{
+			ProjectileMovementComponent->InitialSpeed = InitialSpeed;
+			ProjectileMovementComponent->MaxSpeed = InitialSpeed;
+		}
+	}
+	else if (PropertyName == GET_MEMBER_NAME_CHECKED(ASProjectile, ProjectileGravityScale))
+	{
+		if (ProjectileMovementComponent)
+		{
+			ProjectileMovementComponent->ProjectileGravityScale = ProjectileGravityScale;
+		}
+	}
+}
+#endif
 
 void ASProjectile::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
-	
-	// if (HasAuthority())
-	// {
-	// 	CollisionBox->OnComponentHit.AddDynamic(this, &ASProjectile::OnHit);
-	// }
 }
 
 void ASProjectile::StartDestroyTimer()
@@ -61,10 +75,16 @@ void ASProjectile::Destroyed()
     }
 }
 
+void ASProjectile::ApplyDamage(const UObject* WorldContextObject, const FVector& Location, AActor* DamagedActor, float BaseDamage, AController* EventInstigator, AActor* DamageCauser, TSubclassOf<UDamageType> DamageTypeClass, ECollisionChannel DamageChannel) const
+{
+	ExplodeDamage(WorldContextObject, Location, EventInstigator, DamageCauser, BaseDamage, DamageChannel);
+}
+
+
 void ASProjectile::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
 	if (Tracer)
 	{
 		TracerComponent = UGameplayStatics::SpawnEmitterAttached(
@@ -77,10 +97,7 @@ void ASProjectile::BeginPlay()
 		);
 	}
 
-	if (HasAuthority())
-	{
-		CollisionBox->OnComponentHit.AddDynamic(this, &ASProjectile::OnHit);
-	}
+	CollisionBox->OnComponentHit.AddDynamic(this, &ASProjectile::OnHit);
 }
 
 
@@ -100,29 +117,24 @@ void ASProjectile::SpawnTrailSystem()
 	}
 }
 
-void ASProjectile::ExplodeDamage()
+void ASProjectile::ExplodeDamage(const UObject* WorldContextObject, const FVector& Location, AController* EventInstigator, AActor* DamageCauser, float BaseDamage, ECollisionChannel DamageChannel) const
 {
 	if (HasAuthority())
 	{
-		if (const APawn* FiringPawn = GetInstigator())
-		{
-			if (AController* FiringController = FiringPawn->GetController())
-			{
-				UGameplayStatics::ApplyRadialDamageWithFalloff(
-					this,
-					Damage,
-					10.f,
-					GetActorLocation(),
-					DamageInnerRadius,
-					DamageOuterRadius,
-					1.f,
-					UDamageType::StaticClass(),
-					TArray<AActor*>(),
-					this,
-					FiringController
-				);
-			}
-		}
+		UShooterGameplayStatics::ApplyRadialDamageWithFalloff(
+			WorldContextObject,
+			BaseDamage,
+			10.f,
+			Location,
+			DamageInnerRadius,
+			DamageOuterRadius,
+			1.f,
+			UDamageType::StaticClass(),
+			TArray<AActor*>(),
+			DamageChannel,
+			DamageCauser,
+			EventInstigator
+		);
 	}
 }
 
@@ -130,7 +142,6 @@ void ASProjectile::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrim
 {
 	Destroy();
 }
-
 
 
 void ASProjectile::Tick(float DeltaTime)

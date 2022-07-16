@@ -14,6 +14,7 @@
 #include "HUD/SAnnouncementWidget.h"
 #include "HUD/SCharacterOverlay.h"
 #include "HUD/SHUD.h"
+#include "HUD/SReturnToMainMenuWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "NetworkedShooter/NetworkedShooter.h"
@@ -33,6 +34,7 @@ void ASPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ASPlayerController, MatchState);
+	DOREPLIFETIME_CONDITION(ASPlayerController, bHasHighPing, COND_OwnerOnly);
 }
 
 void ASPlayerController::BeginPlay()
@@ -41,10 +43,17 @@ void ASPlayerController::BeginPlay()
 	
 	if (IsLocalController())
 	{
-		InitGameStateAndTick();
-		
-		FTimerHandle Handle;
-		GetWorldTimerManager().SetTimer(Handle, this, &ASPlayerController::CheckPing, CheckPingFrequency, true);
+		InitHUD();
+		SetGameState(GetWorld()->GetGameState());
+
+		if (!HasAuthority())
+		{
+			FTimerHandle PingHandle;
+			GetWorldTimerManager().SetTimer(PingHandle, this, &ASPlayerController::CheckPing, CheckPingFrequency, true);
+
+			FTimerHandle SyncHandle;
+			GetWorldTimerManager().SetTimer(SyncHandle, this, &ASPlayerController::SyncServerTime, TimeSyncFrequency, true);
+		}
 	}
 
 	ServerCheckMatchState();
@@ -57,27 +66,25 @@ void ASPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-void ASPlayerController::InitGameStateAndTick()
+void ASPlayerController::InitHUD()
 {
 	HUD = Cast<ASHUD>(GetHUD());
 	HUD->Initialize();
 	OnHUDInitialized.Broadcast();
-	
-	if (GetWorld()->GetGameState())
+}
+
+void ASPlayerController::SetGameState(AGameStateBase* NewGameState)
+{
+	GameState = Cast<ASGameState>(NewGameState);
+	if (GameState)
 	{
-		GameState = GetWorld()->GetGameState();
 		HUD->ShowAnnouncement(true);
 		SetActorTickEnabled(true);
+		GetWorld()->GameStateSetEvent.RemoveAll(this);
 	}
 	else
 	{
-		GameStateSetDelegateHandle = GetWorld()->GameStateSetEvent.AddLambda([&](AGameStateBase* GS)
-		{
-			GameState = GS;
-			HUD->ShowAnnouncement(true);
-			SetActorTickEnabled(true);
-			GetWorld()->GameStateSetEvent.Remove(GameStateSetDelegateHandle);
-		});
+		GetWorld()->GameStateSetEvent.AddUObject(this, &ASPlayerController::SetGameState);
 	}
 }
 
@@ -92,8 +99,19 @@ void ASPlayerController::CheckPing()
 {
 	if (PlayerState && PlayerState->GetPingInMilliseconds() > HighPingThreshold)
 	{
-		HighPingWarning();
+		DisplayHighPingWarning();
+		ServerReportHighPing(true);
 	}
+	else
+	{
+		ServerReportHighPing(false);
+	}
+}
+
+void ASPlayerController::ServerReportHighPing_Implementation(bool bHighPing)
+{
+	bHasHighPing = bHighPing;
+	ShooterPlayerState->bHasHighPing = bHighPing;
 }
 
 void ASPlayerController::InitPlayerState()
@@ -106,23 +124,22 @@ void ASPlayerController::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
 
-	if (PlayerState && IsLocalPlayerController())
-	{
-		PlayerStateHUDInit();
-	}
+	SetPlayerState(PlayerState);
+	
+	
 }
 
 void ASPlayerController::PlayerStateHUDInit()
 {
-	if (ASPlayerState* PS = GetPlayerState<ASPlayerState>())
+	if (ShooterPlayerState)
 	{
 		if (HUD && HUD->CharacterOverlay)
 		{
-			PS->OnKillsUpdated.AddUniqueDynamic(this, &ASPlayerController::SetHUDKills);
-			PS->OnKillsUpdated.Broadcast(PS->GetKills());
+			ShooterPlayerState->OnKillsUpdated.AddUniqueDynamic(this, &ASPlayerController::SetHUDKills);
+			ShooterPlayerState->OnKillsUpdated.Broadcast(ShooterPlayerState->GetKills());
 			
-			PS->OnDeathsUpdated.AddUniqueDynamic(this, &ASPlayerController::SetHUDDeaths);
-			PS->OnDeathsUpdated.Broadcast(PS->GetDeaths());
+			ShooterPlayerState->OnDeathsUpdated.AddUniqueDynamic(this, &ASPlayerController::SetHUDDeaths);
+			ShooterPlayerState->OnDeathsUpdated.Broadcast(ShooterPlayerState->GetDeaths());
 		}
 		else
 		{
@@ -139,14 +156,22 @@ void ASPlayerController::CleanupPlayerState()
 {
 	if (IsLocalPlayerController())
 	{
-		if (ASPlayerState* PS = GetPlayerState<ASPlayerState>())
+		if (ShooterPlayerState)
 		{
-			PS->OnKillsUpdated.RemoveDynamic(this, &ASPlayerController::SetHUDKills);
-			PS->OnDeathsUpdated.RemoveDynamic(this, &ASPlayerController::SetHUDDeaths);
+			ShooterPlayerState->OnKillsUpdated.RemoveDynamic(this, &ASPlayerController::SetHUDKills);
+			ShooterPlayerState->OnDeathsUpdated.RemoveDynamic(this, &ASPlayerController::SetHUDDeaths);
 		}
 	}
 	
 	Super::CleanupPlayerState();
+}
+
+void ASPlayerController::SetPlayerState(APlayerState* NewPlayerState)
+{
+	ShooterPlayerState = Cast<ASPlayerState>(NewPlayerState);
+	OnPlayerStateSet.Broadcast(ShooterPlayerState);
+	
+	if (ShooterPlayerState && IsLocalPlayerController()) PlayerStateHUDInit();
 }
 
 void ASPlayerController::OnPossess(APawn* NewPawn)
@@ -163,6 +188,34 @@ void ASPlayerController::OnRep_Pawn()
 	{
 		PlayerCharacterHUDInit();
 	}
+}
+
+void ASPlayerController::ReceivedPlayer()
+{
+	Super::ReceivedPlayer();
+
+	if (IsLocalController())
+	{
+		ServerRequestServerTime(GetWorld()->GetTimeSeconds());
+	}
+}
+
+void ASPlayerController::SyncServerTime()
+{
+	ServerRequestServerTime(GetWorld()->GetTimeSeconds());
+}
+
+void ASPlayerController::ServerRequestServerTime_Implementation(float ClientRequestTime)
+{
+	ClientReportServerTime(ClientRequestTime, GetWorld()->GetTimeSeconds());
+}
+
+void ASPlayerController::ClientReportServerTime_Implementation(float ClientRequestTime, float ServerTime)
+{
+	const float RoundTripTime = GetWorld()->GetTimeSeconds() - ClientRequestTime;
+	SingleTripTime = RoundTripTime * 0.5f;
+	const float CurrentServerTime = ServerTime + SingleTripTime;
+	ClientServerDelta = CurrentServerTime - GetWorld()->GetTimeSeconds();
 }
 
 void ASPlayerController::PlayerCharacterHUDInit()
@@ -188,16 +241,13 @@ void ASPlayerController::PlayerCharacterHUDInit()
 			OnHUDInitialized.AddUniqueDynamic(this, &ASPlayerController::PlayerCharacterHUDInit);
 		}
 	}
-	else
+	else if (!OnNewPawnDelegateHandle.IsValid())
 	{
-		if (!OnNewPawnDelegateHandle.IsValid())
+		OnNewPawnDelegateHandle = OnNewPawn.AddLambda([&](APawn* NewPawn)
 		{
-			OnNewPawnDelegateHandle = OnNewPawn.AddLambda([&](APawn* NewPawn)
-			{
-				this->PlayerCharacterHUDInit();
-				OnNewPawn.Remove(OnNewPawnDelegateHandle);
-			});
-		}
+			this->PlayerCharacterHUDInit();
+			OnNewPawn.Remove(OnNewPawnDelegateHandle);
+		});
 	}
 }
 
@@ -216,9 +266,38 @@ void ASPlayerController::OnUnPossess()
 	Super::OnUnPossess();
 }
 
+void ASPlayerController::ShowReturnToMainMenu()
+{
+	if (ReturnToMainMenuWidget)
+	{
+		if (!ReturnToMainMenuWidgetInstance)
+		{
+			ReturnToMainMenuWidgetInstance = CreateWidget<USReturnToMainMenuWidget>(this, ReturnToMainMenuWidget);
+		}
+		
+		if (ReturnToMainMenuWidgetInstance)
+		{
+			bReturnToMainMenuOpen = !bReturnToMainMenuOpen;
+			if (bReturnToMainMenuOpen)
+			{
+				ReturnToMainMenuWidgetInstance->MenuSetup();
+			}
+			else
+			{
+				ReturnToMainMenuWidgetInstance->MenuTeardown();
+			}
+		}
+	}
+}
+
 bool ASPlayerController::HasLocalAuthority() const
 {
 	return GetRemoteRole() != ROLE_AutonomousProxy && GetLocalRole() == ROLE_Authority;
+}
+
+bool ASPlayerController::HasLowPing() const
+{
+	return !bHasHighPing;
 }
 
 void ASPlayerController::OnMatchStateSet(FName State)
@@ -299,7 +378,7 @@ void ASPlayerController::HandleCooldown()
 
 	if (ASCharacter* SCharacter = Cast<ASCharacter>(GetPawn()))
 	{
-		SCharacter->bDisableGameplay = true;
+		SCharacter->SetDisableGameplay(true);
 		SCharacter->GetCombatComponent()->FireButtonPressed(false);
 	}
 }
@@ -452,7 +531,53 @@ void ASPlayerController::SetHUDGrenades(int32 Grenades)
 	}
 }
 
-void ASPlayerController::HighPingWarning()
+void ASPlayerController::BroadcastElimination(APlayerState* Attacker, APlayerState* Victim)
+{
+	ClientEliminationAnnouncement(Attacker, Victim);
+}
+
+void ASPlayerController::ClientEliminationAnnouncement_Implementation(APlayerState* Attacker, APlayerState* Victim)
+{
+	const APlayerState* Self = GetPlayerState<APlayerState>();
+	if (Attacker && Victim && Self)
+	{
+		if (HUD)
+		{
+			if (Attacker == Self && Victim != Self)
+			{
+				HUD->AddEliminationAnnouncement("You", Victim->GetPlayerName());
+			}
+			else if (Victim == Self && Attacker != Self)
+			{
+				HUD->AddEliminationAnnouncement(Attacker->GetPlayerName(), "You");
+			}
+			else if (Attacker == Victim && Attacker == Self)
+			{
+				HUD->AddEliminationAnnouncement("You", "Yourself");
+			}
+			else if (Attacker == Victim && Attacker != Self)
+			{
+				HUD->AddEliminationAnnouncement(Attacker->GetPlayerName(), "Themself");
+			}
+			else
+			{
+				HUD->AddEliminationAnnouncement(Attacker->GetPlayerName(), Victim->GetPlayerName());
+			}
+		}
+	}
+}
+
+void ASPlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+
+	if (!InputComponent) return;
+	
+	InputComponent->BindAction("Quit", IE_Pressed, this, &ASPlayerController::ShowReturnToMainMenu);
+	
+}
+
+void ASPlayerController::DisplayHighPingWarning()
 {
 	if (IsLocalController())
 	{
@@ -487,6 +612,8 @@ void ASPlayerController::StopHighPingWarning()
 		LOG_WARNING();
 	}
 }
+
+
 
 
 void ASPlayerController::SetHUDMatchCountdown(float CountdownTime) const
@@ -532,7 +659,7 @@ void ASPlayerController::SetHUDAnnouncementCountdown(float CountdownTime)
 	}
 }
 
-void ASPlayerController::SetHUDTime()
+FORCEINLINE void ASPlayerController::SetHUDTime()
 {
 	uint32 SecondsLeft;
 	if (HasAuthority() && GameMode)
@@ -565,11 +692,6 @@ void ASPlayerController::SetHUDTime()
 			SetHUDAnnouncementCountdown(SecondsLeft);
 		}
 	}
-}
-
-float ASPlayerController::GetServerTime() const
-{
-	return GameState->GetServerWorldTimeSeconds();
 }
 
 

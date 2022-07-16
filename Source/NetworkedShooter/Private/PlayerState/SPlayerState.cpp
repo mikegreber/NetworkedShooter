@@ -15,6 +15,7 @@ void ASPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 	DOREPLIFETIME(ASPlayerState, Kills);
 	DOREPLIFETIME(ASPlayerState, Deaths);
+	DOREPLIFETIME(ASPlayerState, bHasHighPing);
 }
 
 void ASPlayerState::BeginPlay()
@@ -26,47 +27,12 @@ void ASPlayerState::SetOwner(AActor* NewOwner)
 {
 	Super::SetOwner(NewOwner);
 	
-	Controller = Cast<ASPlayerController>(NewOwner);
-	// if (!Controller)
-	// {
-	// 	Controller = Cast<ASPlayerController>(NewOwner);
-	// 	if (Controller->IsLocalController())
-	// 	{
-	// 		if (Controller->GetHUD() && Controller->HasActorBegunPlay())
-	// 		{
-	// 			UE_LOG(LogTemp, Warning, TEXT("%s default"), __FUNCTIONW__)
-	// 			OnPlayerHUDCreated(Cast<ASHUD>(Controller->GetHUD()));
-	// 		}
-	// 		else
-	// 		{
-	// 			UE_LOG(LogTemp, Warning, TEXT("%s set delegate"), __FUNCTIONW__)
-	// 			Controller->OnHUDWidgetsCreated.AddDynamic(this, &ASPlayerState::OnPlayerHUDCreated);
-	// 		}
-	// 	}
-	// }
-	
+	PlayerController = Cast<ASPlayerController>(NewOwner);
 }
 
 void ASPlayerState::OnPlayerHUDCreated(ASHUD* HUD)
 {
-	// OnKillsUpdated.AddDynamic(HUD, &ASHUD::UpdateKills);
-	// OnKillsUpdated.Broadcast(Kills);
-	//
-	// OnDeathsUpdated.AddDynamic(HUD, &ASHUD::ASHUD::UpdateDeaths);
-	// OnDeathsUpdated.Broadcast(Deaths);
-	//
-	// UE_LOG(LogTemp, Warning, TEXT("%s"), __FUNCTIONW__)
-	// Controller->OnHUDWidgetsCreated.RemoveDynamic(this, &ASPlayerState::OnPlayerHUDCreated);
 }
-
-// void ASPlayerState::UpdateHUD() const
-// {
-// 	if (Controller)
-// 	{
-// 		Controller->SetHUDKills(Kills);
-// 		Controller->SetHUDDeaths(Deaths);
-// 	}
-// }
 
 void ASPlayerState::AddToKills(int32 KillsAmount)
 {
@@ -75,7 +41,7 @@ void ASPlayerState::AddToKills(int32 KillsAmount)
 	if (HasAuthority())
 	{
 		Kills += KillsAmount;
-		if (Controller->HasLocalAuthority()) OnRep_Kills();
+		if (PlayerController->HasLocalAuthority()) OnRep_Kills();
 	}
 }
 
@@ -96,7 +62,7 @@ void ASPlayerState::AddToDeaths(int32 DefeatsAmount)
 	if (HasAuthority())
 	{
 		Deaths += DefeatsAmount;
-		if (Controller->HasLocalAuthority()) OnRep_Deaths();
+		if (PlayerController->HasLocalAuthority()) OnRep_Deaths();
 	}
 }
 

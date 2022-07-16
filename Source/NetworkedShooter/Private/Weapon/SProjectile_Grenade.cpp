@@ -23,7 +23,7 @@ ASProjectile_Grenade::ASProjectile_Grenade()
 
 void ASProjectile_Grenade::Destroyed()
 {
-	ExplodeDamage();
+	ApplyDamage(this, GetActorLocation(), nullptr, Damage, GetInstigatorController(), GetInstigator(), UDamageType::StaticClass());
 	
 	Super::Destroyed();
 }

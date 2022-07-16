@@ -6,19 +6,83 @@
 #include "GameFramework/Actor.h"
 #include "SProjectile.generated.h"
 
-UCLASS()
+UCLASS(Abstract)
 class NETWORKEDSHOOTER_API ASProjectile : public AActor
 {
 	GENERATED_BODY()
+
+public:
 	
+	UPROPERTY(EditAnywhere, Category = "Properties | Projectile")
+	float InitialSpeed = 150000.f;
+
+	UPROPERTY(EditAnywhere, Category = "Properties | Projectile")
+	float ProjectileGravityScale = 1.f;
+
+protected:
+	
+	UPROPERTY(EditAnywhere, Category = "Properties | Damage")
+	float DamageInnerRadius = 200.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Properties | Damage")
+	float DamageOuterRadius = 500.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Properties | Effects")
+	UParticleSystem* ImpactParticles;
+
+	UPROPERTY(EditAnywhere, Category = "Properties | Effects")
+	UParticleSystem* Tracer;
+	
+	UPROPERTY(EditAnywhere, Category = "Properties | Effects")
+	class USoundCue* ImpactSound;
+	
+	UPROPERTY(EditAnywhere, Category = "Properties | Effects")
+	class UNiagaraSystem* TrailSystem;
+	
+	UPROPERTY(EditAnywhere, Category = "Properties | Settings")
+	float DestroyTime = 3.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	class UBoxComponent* CollisionBox;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	UStaticMeshComponent* ProjectileMesh;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	class UProjectileMovementComponent* ProjectileMovementComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	UParticleSystemComponent* TracerComponent;
+
+public:
+	
+	bool bUseServerSideRewind = false;
+	FVector_NetQuantize TraceStart;
+	FVector_NetQuantize100 InitialVelocity;
+	
+	float Damage;
+
+protected:
+	
+	UPROPERTY()
+	class UNiagaraComponent* TrailSystemComponent;
+	
+	FTimerHandle DestroyTimer;
+
 public:
 	
 	ASProjectile();
 
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
 	virtual void Tick(float DeltaTime) override;
 	virtual void PostInitializeComponents() override;
 	virtual void Destroyed() override;
-	
+
+	virtual void ApplyDamage(const UObject* WorldContextObject, const FVector& Location, AActor* DamagedActor, float BaseDamage, AController* EventInstigator, AActor* DamageCauser, TSubclassOf<UDamageType> DamageTypeClass, ECollisionChannel DamageChannel = ECC_Visibility) const;
+
 protected:
 	
 	virtual void BeginPlay() override;
@@ -31,48 +95,7 @@ protected:
 	
 	void SpawnTrailSystem();
 
-	void ExplodeDamage();
-	
-	UPROPERTY(EditAnywhere, Category = "Damage")
-	float Damage;
-
-	UPROPERTY(EditAnywhere, Category = "Damage")
-	float DamageInnerRadius = 200.f;
-	
-	UPROPERTY(EditAnywhere, Category = "Damage")
-	float DamageOuterRadius = 500.f;
-	
-	UPROPERTY(EditAnywhere, Category = "Effects")
-	class UParticleSystem* ImpactParticles;
-
-	UPROPERTY(EditAnywhere, Category = "Effects")
-	class USoundCue* ImpactSound;
-
-	UPROPERTY(EditAnywhere, Category = "Components")
-	class UBoxComponent* CollisionBox;
-
-	UPROPERTY(EditAnywhere, Category = "Effects")
-	class UNiagaraSystem* TrailSystem;
-
-	UPROPERTY()
-	class UNiagaraComponent* TrailSystemComponent;
-
-	UPROPERTY(VisibleAnywhere)
-	UStaticMeshComponent* ProjectileMesh;
-
-	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
-	class UProjectileMovementComponent* ProjectileMovementComponent;
-	
-private:
-	
-	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
-	class UParticleSystemComponent* TracerComponent;
-	
-	UPROPERTY(EditAnywhere, Category = "Effects")
-	class UParticleSystem* Tracer;
-
-	FTimerHandle DestroyTimer;
-
-	UPROPERTY(EditAnywhere)
-	float DestroyTime = 3.f;
+	void ExplodeDamage(const UObject* WorldContextObject, const FVector& Location, AController* EventInstigator, AActor* DamageCauser, float BaseDamage, ECollisionChannel DamageChannel) const;
 };
+
+

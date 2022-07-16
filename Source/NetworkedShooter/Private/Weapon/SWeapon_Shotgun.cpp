@@ -4,10 +4,12 @@
 #include "Weapon/SWeapon_Shotgun.h"
 
 #include "Character/SCharacter.h"
+#include "Components/SLagCompensationComponent.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "Kismet/GameplayStatics.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "Particles/ParticleSystemComponent.h"
+#include "PlayerController/SPlayerController.h"
 #include "Sound/SoundCue.h"
 
 void ASWeapon_Shotgun::Fire(FVector_NetQuantize HitTarget)
@@ -19,50 +21,74 @@ void ASWeapon_Shotgun::Fire(FVector_NetQuantize HitTarget)
 		// seed for random scatter to replicate spread
 		const int8 Seed = FMath::RoundToInt(GetWorld()->GetTimeSeconds());
 		
-		LocalFireWithSeed(HitTarget, Seed);
+		LocalFire(GetWeaponMesh()->GetSocketTransform("MuzzleFlash"), HitTarget, false, Seed);
 		ServerFireWithSeed(HitTarget, Seed);
 		
 		StartFireTimer();
 	}
 }
 
-void ASWeapon_Shotgun::LocalFireWithSeed(const FVector_NetQuantize& HitTarget, int8 Seed)
+void ASWeapon_Shotgun::LocalFire(const FTransform& MuzzleTransform, const FVector_NetQuantize& HitTarget, bool bIsRewindFire, int8 Seed)
 {
-	ASWeapon::LocalFire(const_cast<FVector_NetQuantize&>(HitTarget));
+	ASWeapon::LocalFire(MuzzleTransform, HitTarget, bIsRewindFire, Seed);
 	
-	APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	if (!OwnerPawn) return;
-
-	const USkeletalMeshSocket* MuzzleFlashSocket = GetWeaponMesh()->GetSocketByName("MuzzleFlash");
-	if (!MuzzleFlashSocket)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s MuzzleFlash socket not found on weapon mesh (%s)"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR)
-		return;
-	}
-	
-	const FTransform SocketTransform = MuzzleFlashSocket->GetSocketTransform(GetWeaponMesh());
-	const FVector TraceStart = SocketTransform.GetLocation();
-	
-	// seed random so shots are the same on all machines
-	FMath::RandInit(Seed);
+	const FVector TraceStart = MuzzleTransform.GetLocation();
+	const ECollisionChannel TraceType = bIsRewindFire ? ECC_RewindTrace : ECC_Visibility;
 
 	TMap<ASCharacter*, uint32> HitMap;
-	for (uint32 i = 0; i < NumberOfPellets; ++i)
+	TArray<FHitResult> FireHits;
+	FireHits.Init(FHitResult(), NumberOfPellets);
+	for (FHitResult& FireHit : FireHits)
 	{
-		FHitResult FireHit;
-		WeaponTraceHit(TraceStart, TraceEndWithScatter(TraceStart, HitTarget), FireHit);
-
-		// collect hits on server
-		if (HasAuthority())
+		WeaponTraceHit(TraceStart, TraceEndWithScatter(TraceStart, HitTarget), FireHit, TraceType);
+		
+		if (ASCharacter* HitCharacter = Cast<ASCharacter>(FireHit.GetActor()))
 		{
-			if (ASCharacter* HitCharacter = Cast<ASCharacter>(FireHit.GetActor()))
+			if (HitMap.Contains(HitCharacter)) ++HitMap[HitCharacter];
+			else HitMap.Emplace(HitCharacter, 1);
+		}
+	}
+	
+	if (!HitMap.IsEmpty())
+	{
+		if (HasAuthority())
+		{   
+			if ((IsServerControlled() && IsLocallyControlled()) || bIsRewindFire || !CanUseServerSideRewind())
 			{
-				if (HitMap.Contains(HitCharacter)) ++HitMap[HitCharacter];
-				else HitMap.Emplace(HitCharacter, 1);
+				// fired from server host, from rewind, or if rewind is disabled - apply damage on server
+				ApplyDamage(HitMap);
 			}
 		}
+		else if (IsLocallyControlled() && CanUseServerSideRewind()) // local client - use server-side rewind
+		{
+			ServerRewind(HitMap, TraceStart, HitTarget, Seed);
+		}
+	}
 
-		// play effects on all machines
+	if (!bIsRewindFire)
+	{
+		PlayFireEffects(MuzzleTransform, FireHits);
+	}
+}
+
+void ASWeapon_Shotgun::PlayFireEffects(const FTransform& MuzzleTransform, const TArray<FHitResult>& FireHits) const
+{
+	for (const FHitResult& FireHit : FireHits)
+	{
+		if (BeamParticles)
+		{
+			if (UParticleSystemComponent* Beam = UGameplayStatics::SpawnEmitterAtLocation(
+				GetWorld(),
+				BeamParticles,
+				MuzzleTransform.GetLocation(),
+				FRotator::ZeroRotator,
+				true
+			))
+			{
+				Beam->SetVectorParameter(FName("Target"), FireHit.ImpactPoint);
+			}
+		}
+	
 		if (ImpactParticles)
 		{
 			UGameplayStatics::SpawnEmitterAtLocation(
@@ -72,6 +98,7 @@ void ASWeapon_Shotgun::LocalFireWithSeed(const FVector_NetQuantize& HitTarget, i
 				FireHit.ImpactNormal.Rotation()
 			);
 		}
+	
 		if (HitSound)
 		{
 			UGameplayStatics::PlaySoundAtLocation(
@@ -83,36 +110,36 @@ void ASWeapon_Shotgun::LocalFireWithSeed(const FVector_NetQuantize& HitTarget, i
 			);
 		}
 	}
+}
 
-	// apply damage on server
-	if (HasAuthority())
+void ASWeapon_Shotgun::ApplyDamage(const TMap<ASCharacter*, uint32>& HitMap)
+{
+	for (const auto& HitPair : HitMap)
 	{
-		if (AController* InstigatorController = OwnerPawn->GetController())
+		if (HitPair.Key)
 		{
-			for (auto HitPair : HitMap)
-			{
-				if (HitPair.Key)
-				{
-					UGameplayStatics::ApplyDamage(
-						HitPair.Key,
-						Damage * HitPair.Value,
-						InstigatorController,
-						this,
-						UDamageType::StaticClass()
-					);
-				}
-			}
+			UGameplayStatics::ApplyDamage(
+				HitPair.Key,
+				Damage * HitPair.Value,
+				OwnerController,
+				this,
+				UDamageType::StaticClass()
+			);
 		}
 	}
-	
 }
 
-void ASWeapon_Shotgun::ServerFireWithSeed_Implementation(const FVector_NetQuantize& HitTarget, int8 Seed)
+void ASWeapon_Shotgun::ServerRewind(const TMap<ASCharacter*, uint32>& HitMap, const FVector& TraceStart, const FVector_NetQuantize& HitTarget, int8 Seed)
 {
-	MulticastFireWithSeed(HitTarget, Seed);
-}
-
-void ASWeapon_Shotgun::MulticastFireWithSeed_Implementation(const FVector_NetQuantize& HitTarget, int8 Seed)
-{
-	if (!IsLocallyControlled()) LocalFireWithSeed(HitTarget, Seed);
+	TArray<ASCharacter*> HitCharacters;
+	HitMap.GetKeys(HitCharacters);
+				
+	OwnerCharacter->GetLagCompensationComponent()->ServerRewindHitTrace(
+		HitCharacters,
+		TraceStart,
+		HitTarget,
+		OwnerController->GetServerTime() - OwnerController->GetSingleTripTime(),
+		this,
+		Seed
+	);
 }

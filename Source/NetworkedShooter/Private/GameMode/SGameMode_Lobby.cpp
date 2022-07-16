@@ -5,6 +5,15 @@
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
 
+void ASGameMode_Lobby::StartGame()
+{
+	if (UWorld* World = GetWorld())
+	{
+		bUseSeamlessTravel = true;
+		World->ServerTravel(FString("/Game/Maps/ShooterMap?listen"));
+	}
+}
+
 void ASGameMode_Lobby::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
@@ -12,14 +21,10 @@ void ASGameMode_Lobby::PostLogin(APlayerController* NewPlayer)
 	if (GameState)
 	{
 		const int32 NumberOfPlayers = GameState.Get()->PlayerArray.Num();
-		if (NumberOfPlayers == 2)
-		{
-			if (UWorld* World = GetWorld())
-			{
-				bUseSeamlessTravel = true;
-				World->ServerTravel(FString("/Game/Maps/ShooterMap?listen"));
-			}
-		}
+		// if (NumberOfPlayers == 2)
+		// {
+		// 	StartGame();
+		// }
 		
 		if (GEngine)
 		{

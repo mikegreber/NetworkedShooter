@@ -97,6 +97,6 @@ void USAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	}
 
 	bUseFABRIK = Character->GetCombatState() == ESCombatState::ECS_Unoccupied;
-	bUseAimOffsets = Character->GetCombatState() == ESCombatState::ECS_Unoccupied && !Character->bDisableGameplay;
-	bTransformRightHand = Character->GetCombatState() == ESCombatState::ECS_Unoccupied && !Character->bDisableGameplay;
+	bUseAimOffsets = Character->GetCombatState() == ESCombatState::ECS_Unoccupied && !Character->IsGameplayDisabled();
+	bTransformRightHand = Character->GetCombatState() == ESCombatState::ECS_Unoccupied && !Character->IsGameplayDisabled();
 }

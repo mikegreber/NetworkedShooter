@@ -11,7 +11,7 @@ USBuffComponent::USBuffComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
-void USBuffComponent::SetCharacter(ASCharacter* NewCharacter)
+void USBuffComponent::SetOwnerCharacter(ASCharacter* NewCharacter)
 {
 	if (NewCharacter)
 	{

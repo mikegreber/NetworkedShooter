@@ -27,10 +27,10 @@ protected:
 	virtual void OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit) override;
 
 	UPROPERTY(EditAnywhere)
-	class USoundCue* ProjectileLoop;
+	USoundCue* ProjectileLoop;
 
 	UPROPERTY()
-	class UAudioComponent* ProjectileLoopComponent;
+	UAudioComponent* ProjectileLoopComponent;
 
 	UPROPERTY(EditAnywhere)
 	USoundAttenuation* LoopingSoundAttenuation;

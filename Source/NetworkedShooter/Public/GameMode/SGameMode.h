@@ -26,6 +26,8 @@ public:
 	virtual void PlayerEliminated(class ASCharacter* EliminatedCharacter, AController* VictimController, AController* KillerController);
 
 	virtual void RequestRespawn(class ACharacter* EliminatedCharacter, AController* EliminatedController);
+
+	void PlayerLeftGame(class ASPlayerState* PlayerLeaving);
 	
 
 public:
