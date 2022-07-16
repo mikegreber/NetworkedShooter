@@ -39,17 +39,21 @@ void ASProjectile_Bullet::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor
 		{
 			if (ASPlayerController* OwnerController = OwnerCharacter->GetPlayerController())
 			{
+				
+
 				if (bUseServerSideRewind)
 				{
 					if (OwnerCharacter->IsLocallyControlled())
 					{
 						if (OwnerCharacter->HasAuthority()) // shot from local server
 						{
+							const FName BoneName =  Hit.BoneName;
 							ApplyDamage(
 								this,
 								GetActorLocation(),
 								HitCharacter,
-								Damage, OwnerController,
+								Hit.BoneName == "Head" ? HeadshotDamage : Damage,
+								OwnerController,
 								this,
 								UDamageType::StaticClass()
 							);
@@ -72,7 +76,7 @@ void ASProjectile_Bullet::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor
 						this,
 						 GetActorLocation(),
 						 HitCharacter,
-						 Damage,
+						 Hit.BoneName == "Head" ? HeadshotDamage : Damage,
 						 OwnerController,
 						 this,
 						 UDamageType::StaticClass()

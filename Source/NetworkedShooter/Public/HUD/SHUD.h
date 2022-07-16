@@ -42,10 +42,11 @@ public:
 	
 	void ShowAnnouncement(bool bShowAnnouncement);
 
+	void CreateEliminationAnnouncement();
+
 	// call before accessing CharacterOverlay
 
 	void ShowOverlay(bool bShowOverlay);
-	// FOnWidgetsCreated OnWidgetsCreated;
 	
 protected:
 	virtual void BeginPlay() override;
@@ -61,10 +62,17 @@ private:
 	UPROPERTY(EditAnywhere)
 	float CrosshairSpreadMax = 16.f;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "Elimination")
 	TSubclassOf<class USEliminationAnnouncementWidget> EliminationAnnouncementClass;
 	UPROPERTY() USEliminationAnnouncementWidget* EliminationAnnouncement;
+
+	UPROPERTY(EditAnywhere, Category = "Elimination")
+	float EliminationAnnouncementTime = 1.5f;
+
+	UFUNCTION()
+	void EliminationAnnouncementTimerFinished(USEliminationAnnouncementWidget* AnnouncementToRemove);
 	
 public:
 	FORCEINLINE void SetHUDPackage(const FHUDPackage& Package) { HUDPackage = Package; }
 };
+

@@ -10,7 +10,6 @@ namespace CUSTOM_DEPTH
 	
 }
 
-
 UENUM(BlueprintType)
 enum class EWeaponType : uint8
 {
@@ -23,4 +22,20 @@ enum class EWeaponType : uint8
 	EWT_RocketLauncher UMETA(DisplayName = "Rocket Launcher"),
 
 	EWT_DefaultMAX UMETA(DisplayName = "DefaultMAX"),
+};
+
+struct FHit
+{
+	FHit() : Head(0), Body(0) {}
+	FHit(const FName BoneName) : Head(BoneName == "Head"), Body(BoneName != "Head") {}
+	
+	int32 Head;
+	int32 Body;
+
+	FHit& operator+=(const FHit& Hit)
+	{
+		Head += Hit.Head;
+		Body += Hit.Body;
+		return *this;
+	}
 };

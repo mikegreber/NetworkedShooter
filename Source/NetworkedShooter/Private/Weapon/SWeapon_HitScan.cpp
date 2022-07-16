@@ -30,8 +30,10 @@ void ASWeapon_HitScan::LocalFire(const FTransform& MuzzleTransform, const FVecto
 		{   
 			if ((IsServerControlled() && IsLocallyControlled()) || bIsRewindFire || !CanUseServerSideRewind())
 			{
+				const FName BoneName = bIsRewindFire ? FireHit.GetComponent()->GetFName() : FireHit.BoneName;
+				
 				// fired from server host, from rewind, or if rewind is disabled - apply damage on server
-				ApplyDamage(HitCharacter);
+				ApplyDamage(HitCharacter, BoneName);
 			}
 		}
 		else if (IsLocallyControlled() && CanUseServerSideRewind()) // local client - use server-side rewind
@@ -168,11 +170,11 @@ void ASWeapon_HitScan::WeaponTraceHit(const FVector& TraceStart, const FVector& 
 	}
 }
 
-void ASWeapon_HitScan::ApplyDamage(ASCharacter* HitCharacter)
+void ASWeapon_HitScan::ApplyDamage(ASCharacter* HitCharacter, FName BoneName)
 {
 	UGameplayStatics::ApplyDamage(
 		HitCharacter,
-		Damage,
+		BoneName == "Head" ? HeadshotDamage : Damage,
 		OwnerController,
 		this,
 		UDamageType::StaticClass()

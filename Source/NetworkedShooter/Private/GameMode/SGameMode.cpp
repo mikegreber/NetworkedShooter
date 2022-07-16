@@ -112,6 +112,8 @@ void ASGameMode::PlayerEliminated(ASCharacter* EliminatedCharacter, AController*
 		EliminatedCharacter->Eliminated(false);
 	}
 
+	
+	
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		ASPlayerController* Player = Cast<ASPlayerController>(*It);

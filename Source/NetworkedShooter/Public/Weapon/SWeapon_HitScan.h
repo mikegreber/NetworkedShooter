@@ -33,7 +33,7 @@ protected:
 
 	void WeaponTraceHit(const FVector& TraceStart, const FVector& HitTarget, FHitResult& OutHit, ECollisionChannel CollisionChannel = ECC_Visibility) const;
 
-	void ApplyDamage(ASCharacter* HitCharacter);
+	void ApplyDamage(ASCharacter* HitCharacter, FName BoneName);
 	
 	void ServerRewind(ASCharacter* HitCharacter, const FVector& TraceStart, const FVector_NetQuantize& HitTarget);
 

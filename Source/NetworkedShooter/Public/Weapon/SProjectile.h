@@ -61,6 +61,7 @@ public:
 	FVector_NetQuantize100 InitialVelocity;
 	
 	float Damage;
+	float HeadshotDamage;
 
 protected:
 	

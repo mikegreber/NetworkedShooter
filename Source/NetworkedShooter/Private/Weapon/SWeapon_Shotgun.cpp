@@ -34,8 +34,8 @@ void ASWeapon_Shotgun::LocalFire(const FTransform& MuzzleTransform, const FVecto
 	
 	const FVector TraceStart = MuzzleTransform.GetLocation();
 	const ECollisionChannel TraceType = bIsRewindFire ? ECC_RewindTrace : ECC_Visibility;
-
-	TMap<ASCharacter*, uint32> HitMap;
+	
+	TMap<ASCharacter*, FHit> HitMap;
 	TArray<FHitResult> FireHits;
 	FireHits.Init(FHitResult(), NumberOfPellets);
 	for (FHitResult& FireHit : FireHits)
@@ -44,8 +44,11 @@ void ASWeapon_Shotgun::LocalFire(const FTransform& MuzzleTransform, const FVecto
 		
 		if (ASCharacter* HitCharacter = Cast<ASCharacter>(FireHit.GetActor()))
 		{
-			if (HitMap.Contains(HitCharacter)) ++HitMap[HitCharacter];
-			else HitMap.Emplace(HitCharacter, 1);
+			const FName BoneName = bIsRewindFire ? FireHit.GetComponent()->GetFName() : FireHit.BoneName;
+			const FHit Hit(BoneName);
+			
+			if (HitMap.Contains(HitCharacter)) HitMap[HitCharacter] += Hit;
+			else HitMap.Emplace(HitCharacter, Hit);
 		}
 	}
 	
@@ -112,15 +115,15 @@ void ASWeapon_Shotgun::PlayFireEffects(const FTransform& MuzzleTransform, const 
 	}
 }
 
-void ASWeapon_Shotgun::ApplyDamage(const TMap<ASCharacter*, uint32>& HitMap)
+void ASWeapon_Shotgun::ApplyDamage(const TMap<ASCharacter*, FHit>& HitMap)
 {
-	for (const auto& HitPair : HitMap)
+	for (const auto& [HitCharacter, Hits] : HitMap)
 	{
-		if (HitPair.Key)
+		if (HitCharacter)
 		{
 			UGameplayStatics::ApplyDamage(
-				HitPair.Key,
-				Damage * HitPair.Value,
+				HitCharacter,
+				Damage * Hits.Body + HeadshotDamage * Hits.Head,
 				OwnerController,
 				this,
 				UDamageType::StaticClass()
@@ -129,7 +132,7 @@ void ASWeapon_Shotgun::ApplyDamage(const TMap<ASCharacter*, uint32>& HitMap)
 	}
 }
 
-void ASWeapon_Shotgun::ServerRewind(const TMap<ASCharacter*, uint32>& HitMap, const FVector& TraceStart, const FVector_NetQuantize& HitTarget, int8 Seed)
+void ASWeapon_Shotgun::ServerRewind(const TMap<ASCharacter*, FHit>& HitMap, const FVector& TraceStart, const FVector_NetQuantize& HitTarget, int8 Seed)
 {
 	TArray<ASCharacter*> HitCharacters;
 	HitMap.GetKeys(HitCharacters);

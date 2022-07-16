@@ -15,7 +15,20 @@ void ASHUD::BeginPlay()
 void ASHUD::Initialize()
 {
 	CreateAnnouncement();
+	CreateEliminationAnnouncement();
 	CreateOverlay();
+}
+
+void ASHUD::CreateEliminationAnnouncement()
+{
+	if (APlayerController* OwningPlayer = GetOwningPlayerController())
+	{
+		if (EliminationAnnouncementClass)
+		{
+			EliminationAnnouncement = CreateWidget<USEliminationAnnouncementWidget>(OwningPlayer, EliminationAnnouncementClass);
+			if (EliminationAnnouncement) EliminationAnnouncement->AddToViewport();
+		}
+	}
 }
 
 void ASHUD::AddEliminationAnnouncement(FString Attacker, FString Victim)
@@ -23,12 +36,34 @@ void ASHUD::AddEliminationAnnouncement(FString Attacker, FString Victim)
 	APlayerController* OwningPlayer = GetOwningPlayerController();
 	if (OwningPlayer && EliminationAnnouncementClass)
 	{
-		EliminationAnnouncement = CreateWidget<USEliminationAnnouncementWidget>(OwningPlayer, EliminationAnnouncementClass);
 		if (EliminationAnnouncement)
 		{
 			EliminationAnnouncement->SetEliminationAnnouncementText(Attacker, Victim);
-			EliminationAnnouncement->AddToViewport();
 		}
+		
+		// EliminationAnnouncement = CreateWidget<USEliminationAnnouncementWidget>(OwningPlayer, EliminationAnnouncementClass);
+		// if (EliminationAnnouncement)
+		// {
+		// 	EliminationAnnouncement->SetEliminationAnnouncementText(Attacker, Victim);
+		// 	EliminationAnnouncement->AddToViewport();
+		//
+		// 	FTimerHandle Handle;
+		// 	GetWorldTimerManager().SetTimer(
+		// 		Handle,
+		// 		FTimerDelegate::CreateUObject(this, &ASHUD::EliminationAnnouncementTimerFinished, EliminationAnnouncement),
+		// 		EliminationAnnouncementTime,
+		// 		false
+		// 	);
+		// 	
+		// }
+	}
+}
+
+void ASHUD::EliminationAnnouncementTimerFinished(USEliminationAnnouncementWidget* AnnouncementToRemove)
+{
+	if (AnnouncementToRemove)
+	{
+		AnnouncementToRemove->RemoveFromParent();
 	}
 }
 
@@ -147,3 +182,5 @@ void ASHUD::DrawCrosshair(UTexture2D* Texture, FVector2D ViewportCenter, FVector
 		CrosshairColor
 	);
 }
+
+

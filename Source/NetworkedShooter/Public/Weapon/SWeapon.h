@@ -109,6 +109,9 @@ protected:
 	
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Damage")
 	float Damage = 20.f;
+
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Damage")
+	float HeadshotDamage = 40.f;
 	
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Weapon Scatter")
 	bool bUseScatter = false;
@@ -233,5 +236,6 @@ public:
 	FORCEINLINE float GetZoomInterpSpeed() const { return ZoomInterpSpeed; }
 	FORCEINLINE float GetFireDelay() const { return FireDelay; }
 	FORCEINLINE float GetDamage() const { return Damage; }
+	FORCEINLINE float GetHeadshotDamage() const { return HeadshotDamage; }
 	
 };

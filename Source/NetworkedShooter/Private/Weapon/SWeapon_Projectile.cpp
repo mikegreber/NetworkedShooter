@@ -36,6 +36,7 @@ void ASWeapon_Projectile::LocalFire(const FTransform& MuzzleTransform, const FVe
 			ASProjectile* SpawnedProjectile = World->SpawnActor<ASProjectile>(ProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
 			SpawnedProjectile->bUseServerSideRewind = false;
 			SpawnedProjectile->Damage = Damage;
+			SpawnedProjectile->HeadshotDamage = HeadshotDamage;
 		}
 	}
 	else if (CanUseServerSideRewind())
@@ -51,7 +52,6 @@ void ASWeapon_Projectile::LocalFire(const FTransform& MuzzleTransform, const FVe
 			{
 				ASProjectile* SpawnedProjectile = World->SpawnActor<ASProjectile>(ServerSideRewindProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
 				SpawnedProjectile->bUseServerSideRewind = true;
-				SpawnedProjectile->Damage = Damage;
 				SpawnedProjectile->TraceStart = MuzzleLocation;
 				SpawnedProjectile->InitialVelocity = SpawnedProjectile->GetActorForwardVector() * SpawnedProjectile->InitialSpeed;
 			}
@@ -67,5 +67,6 @@ void ASWeapon_Projectile::LocalFire(const FTransform& MuzzleTransform, const FVe
 		ASProjectile* SpawnedProjectile = World->SpawnActor<ASProjectile>(ProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
 		SpawnedProjectile->bUseServerSideRewind = false;
 		SpawnedProjectile->Damage = Damage;
+		SpawnedProjectile->HeadshotDamage = HeadshotDamage;
 	}
 }

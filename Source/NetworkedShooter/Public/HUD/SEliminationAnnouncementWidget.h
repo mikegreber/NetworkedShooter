@@ -16,12 +16,15 @@ class NETWORKEDSHOOTER_API USEliminationAnnouncementWidget : public UUserWidget
 
 public:
 	UPROPERTY(meta = (BindWidget))
-	class UHorizontalBox* AnnouncementBox;
+	class UVerticalBox* AnnouncementBox;
 
-	UPROPERTY(meta = (BindWidget))
-	class UTextBlock* AnnouncementText;
+	UPROPERTY(EditAnywhere, Category="Announcement")
+	float EliminationAnnouncementTime = 4.f;
+
+	UPROPERTY(EditAnywhere, Category="Announcement")
+	TSubclassOf<class USEliminationAnnouncementText> AnnouncementTextClass;
 	
 	void SetEliminationAnnouncementText(FString AttackerName, FString VictimName);
 	
-
+	void EliminationAnnouncementTimerFinished(USEliminationAnnouncementText* AnnouncementTextWidget);
 };
