@@ -28,7 +28,8 @@ public:
 	virtual void RequestRespawn(class ACharacter* EliminatedCharacter, AController* EliminatedController);
 
 	void PlayerLeftGame(class ASPlayerState* PlayerLeaving);
-	
+
+	virtual float CalculateDamage(AController* Attacker, AController* Victim, float BaseDamage);
 
 public:
 	UPROPERTY(EditDefaultsOnly)
@@ -42,6 +43,7 @@ public:
     	
 	float LevelStartingTime = 0.f;
 
+	bool bIsTeamsMatch = false;
 protected:
 	virtual void BeginPlay() override;
 	

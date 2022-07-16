@@ -7,6 +7,7 @@
 #include "GameFramework/Character.h"
 #include "Interfaces/SCrosshairsInteractionInterface.h"
 #include "Types/SCombatState.h"
+#include "Types/Team.h"
 #include "Types/TurningInPlace.h"
 #include "SCharacter.generated.h"
 
@@ -76,8 +77,23 @@ class NETWORKEDSHOOTER_API ASCharacter : public ACharacter, public ISCrosshairsI
 	UMaterialInstanceDynamic* DynamicDissolveMaterialInstance;
 
 	// material instance set on the Blueprint, used with the dynamic material instance
-	UPROPERTY(EditAnywhere, Category = "Elimination")
+	UPROPERTY(VisibleAnywhere, Category = "Elimination")
 	UMaterialInstance* DissolveMaterialInstance;
+
+	UPROPERTY(EditAnywhere, Category = "Elimination")
+	UMaterialInstance* RedMaterialInstance;
+	
+	UPROPERTY(EditAnywhere, Category = "Elimination")
+	UMaterialInstance* RedDissolveMaterialInstance;
+
+	UPROPERTY(EditAnywhere, Category = "Elimination")
+	UMaterialInstance* BlueMaterialInstance;
+	
+	UPROPERTY(EditAnywhere, Category = "Elimination")
+	UMaterialInstance* BlueDissolveMaterialInstance;
+
+	UPROPERTY(EditAnywhere, Category = "Elimination")
+	UMaterialInstance* OriginalMaterialInstance;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	UParticleSystemComponent* EliminationBotComponent;
@@ -106,7 +122,7 @@ class NETWORKEDSHOOTER_API ASCharacter : public ACharacter, public ISCrosshairsI
 	UPROPERTY(EditAnywhere)
 	class UNiagaraSystem* CrownSystem;
 	UPROPERTY() class UNiagaraComponent* CrownComponent;
-	
+
 public:
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerStateSet, class ASPlayerState*, NewPlayerState);
 
@@ -122,6 +138,7 @@ protected:
 	UPROPERTY() class ASPlayerController* ShooterPlayerController;
 	UPROPERTY() class ASPlayerState* ShooterPlayerState;
 	UPROPERTY() class ASGameState* GameState;
+	UPROPERTY() class ASGameMode* ShooterGameMode;
 	
 	UPROPERTY(EditAnywhere)
 	TMap<FName, UShapeComponent*> RewindCapsules;
@@ -171,8 +188,9 @@ public:
 	
 	virtual void OnRep_PlayerState() override;
 	void CheckLead();
+	void SetTeamColor(ETeam NewTeam);
 
-	void SetPlayerState(APlayerState* NewPlayerState);
+	void SetShooterPlayerState(APlayerState* NewPlayerState);
 	
 	void PlayFireMontage(bool bAiming);
 	void PlayReloadMontage();
@@ -222,6 +240,8 @@ protected:
 	void SimProxiesTurn();
 	void OnKilled(AController* InstigatorController);
 
+	
+	
 	UFUNCTION()
 	void ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser);
 

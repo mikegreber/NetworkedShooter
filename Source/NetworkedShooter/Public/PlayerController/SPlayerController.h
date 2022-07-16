@@ -57,7 +57,7 @@ public:
 	bool HasLocalAuthority() const;
 	bool HasLowPing() const;
 
-	void OnMatchStateSet(FName State);
+	void OnMatchStateSet(FName State, bool bTeamsMatch = false);
 
 	// synced with server world clock
 	float GetServerTime() const;
@@ -69,10 +69,25 @@ public:
 	UFUNCTION() void SetHUDWeaponAmmo(int32 Ammo);
 	UFUNCTION() void SetHUDCarriedAmmo(int32 Ammo);
 	UFUNCTION() void SetHUDGrenades(int32 Grenades);
+	UFUNCTION() void SetHUDRedTeamScore(int32 Score);
+	UFUNCTION() void SetHUDBlueTeamScore(int32 Score);
+	
+	void HideTeamScores();
+	void InitTeamScores();
 	
 	void BroadcastElimination(APlayerState* Attacker, APlayerState* Victim);
 
+	FString GetInfoText(const TArray<ASPlayerState*>& Players);
+	FString GetTeamsInfoText(ASGameState* ShooterGameState);
+
 protected:
+
+	UPROPERTY(ReplicatedUsing=OnRep_ShowTeamScores)
+	bool bShowTeamScores;
+
+	UFUNCTION()
+	void OnRep_ShowTeamScores();
+	
 	virtual void SetupInputComponent() override;
 	virtual void BeginPlay() override;
 	virtual void OnPossess(APawn* NewPawn) override;
@@ -86,7 +101,7 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestServerTime(float ClientRequestTime);
 
-	void HandleMatchHasStarted();
+	void HandleMatchHasStarted(bool bIsTeamMatch = false);
 	void HandleCooldown();
 
 	UFUNCTION()

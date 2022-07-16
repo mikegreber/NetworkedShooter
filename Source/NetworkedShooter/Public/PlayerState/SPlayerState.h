@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
+#include "Types/Team.h"
 #include "SPlayerState.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnStatUpdated, int32, NewValue);
@@ -29,8 +30,6 @@ class NETWORKEDSHOOTER_API ASPlayerState : public APlayerState
 
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	UFUNCTION()
-	void OnPlayerHUDCreated(class ASHUD* HUD);
 	virtual void SetOwner(AActor* NewOwner) override;
 	
 	void AddToKills(int32 KillsAmount);
@@ -49,9 +48,18 @@ public:
 	FORCEINLINE int32 GetKills() const { return Kills; }
 	FORCEINLINE int32 GetDeaths() const { return Deaths; }
 	FORCEINLINE bool HasHighPing() const { return bHasHighPing; }
+	FORCEINLINE ETeam GetTeam() const { return Team; }
+	void SetTeam(ETeam NewTeam);
 	
 protected:
 	virtual void BeginPlay() override;
+
+	UFUNCTION()
+	void OnRep_Team();
+	
 private:
+
+	UPROPERTY(ReplicatedUsing=OnRep_Team)
+	ETeam Team = ETeam::ET_NoTeam;
 	
 };

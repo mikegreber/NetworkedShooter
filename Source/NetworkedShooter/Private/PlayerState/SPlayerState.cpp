@@ -3,6 +3,7 @@
 
 #include "PlayerState/SPlayerState.h"
 
+#include "Character/SCharacter.h"
 #include "HUD/SHUD.h"
 #include "Net/UnrealNetwork.h"
 #include "HUD/SHUD.h"
@@ -13,9 +14,16 @@ void ASPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+	DOREPLIFETIME(ASPlayerState, Team);
 	DOREPLIFETIME(ASPlayerState, Kills);
 	DOREPLIFETIME(ASPlayerState, Deaths);
 	DOREPLIFETIME(ASPlayerState, bHasHighPing);
+}
+
+void ASPlayerState::SetTeam(ETeam NewTeam)
+{
+	Team = NewTeam;
+	OnRep_Team();
 }
 
 void ASPlayerState::BeginPlay()
@@ -23,15 +31,19 @@ void ASPlayerState::BeginPlay()
 	Super::BeginPlay();
 }
 
+void ASPlayerState::OnRep_Team()
+{
+	if (ASCharacter* Character = GetPawn<ASCharacter>())
+	{
+		Character->SetTeamColor(Team);
+	}
+}
+
 void ASPlayerState::SetOwner(AActor* NewOwner)
 {
 	Super::SetOwner(NewOwner);
 	
 	PlayerController = Cast<ASPlayerController>(NewOwner);
-}
-
-void ASPlayerState::OnPlayerHUDCreated(ASHUD* HUD)
-{
 }
 
 void ASPlayerState::AddToKills(int32 KillsAmount)

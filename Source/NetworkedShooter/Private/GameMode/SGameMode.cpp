@@ -35,7 +35,7 @@ void ASGameMode::OnMatchStateSet()
 	{
 		if (ASPlayerController* PlayerController = Cast<ASPlayerController>(*It))
 		{
-			PlayerController->OnMatchStateSet(MatchState);
+			PlayerController->OnMatchStateSet(MatchState, bIsTeamsMatch);
 		}
 	}
 }
@@ -67,7 +67,7 @@ void ASGameMode::PlayerEliminated(ASCharacter* EliminatedCharacter, AController*
 	ASPlayerState* VictimPlayerState = VictimController ? Cast<ASPlayerState>(VictimController->PlayerState) : nullptr;
 
 	ASGameState* ShooterGameState = GetGameState<ASGameState>();
-	
+
 	if (KillerPlayerState && KillerPlayerState != VictimPlayerState && ShooterGameState)
 	{
 		TArray<ASPlayerState*> PlayersCurrentlyInTheLead;
@@ -77,10 +77,23 @@ void ASGameMode::PlayerEliminated(ASCharacter* EliminatedCharacter, AController*
 		}
 		
 		KillerPlayerState->AddToKills(1);
-		if (ASGameState* GS = GetGameState<ASGameState>())
+		ShooterGameState->UpdateTopScore(KillerPlayerState);
+
+		switch (KillerPlayerState->GetTeam())
 		{
-			GS->UpdateTopScore(KillerPlayerState);
+		case ETeam::ET_BlueTeam:
+			{
+				ShooterGameState->BlueTeamScores();
+				break;
+			}
+		case ETeam::ET_RedTeam:
+			{
+				ShooterGameState->RedTeamScores();
+				break;
+			}
+		default: break;
 		}
+
 
 		if (ShooterGameState->TopScoringPlayers.Contains(KillerPlayerState))
 		{
@@ -89,7 +102,7 @@ void ASGameMode::PlayerEliminated(ASCharacter* EliminatedCharacter, AController*
 				Leader->MulticastGainedTheLead();
 			}
 		}
-
+		
 		for (ASPlayerState* PlayerCurrentlyInTheLead : PlayersCurrentlyInTheLead)
 		{
 			if (!ShooterGameState->TopScoringPlayers.Contains(PlayerCurrentlyInTheLead))
@@ -111,8 +124,6 @@ void ASGameMode::PlayerEliminated(ASCharacter* EliminatedCharacter, AController*
 	{
 		EliminatedCharacter->Eliminated(false);
 	}
-
-	
 	
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
@@ -154,4 +165,9 @@ void ASGameMode::PlayerLeftGame(ASPlayerState* PlayerLeaving)
 	{
 		CharacterLeaving->Eliminated(true);
 	}
+}
+
+float ASGameMode::CalculateDamage(AController* Attacker, AController* Victim, float BaseDamage)
+{
+	return BaseDamage;
 }

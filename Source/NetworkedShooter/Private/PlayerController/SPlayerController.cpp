@@ -19,6 +19,7 @@
 #include "Net/UnrealNetwork.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "PlayerState/SPlayerState.h"
+#include "Types/Announcement.h"
 
 #define LOG_WARNING() UE_LOG(LogTemp, Warning, TEXT("Called %s on non-local controller (%s)"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR);
 
@@ -34,6 +35,7 @@ void ASPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ASPlayerController, MatchState);
+	DOREPLIFETIME(ASPlayerController, bShowTeamScores);
 	DOREPLIFETIME_CONDITION(ASPlayerController, bHasHighPing, COND_OwnerOnly);
 }
 
@@ -79,6 +81,8 @@ void ASPlayerController::SetGameState(AGameStateBase* NewGameState)
 	if (GameState)
 	{
 		HUD->ShowAnnouncement(true);
+		GameState->OnRedTeamUpdateScore.AddUniqueDynamic(this, &ASPlayerController::SetHUDRedTeamScore);
+		GameState->OnBlueTeamUpdateScore.AddUniqueDynamic(this, &ASPlayerController::SetHUDBlueTeamScore);
 		SetActorTickEnabled(true);
 		GetWorld()->GameStateSetEvent.RemoveAll(this);
 	}
@@ -300,10 +304,17 @@ bool ASPlayerController::HasLowPing() const
 	return !bHasHighPing;
 }
 
-void ASPlayerController::OnMatchStateSet(FName State)
+void ASPlayerController::OnMatchStateSet(FName State, bool bTeamsMatch)
 {
 	MatchState = State;
-	OnRep_MatchState();
+	if (MatchState == MatchState::InProgress)
+	{
+		HandleMatchHasStarted(bTeamsMatch);
+	}
+	else if (MatchState == MatchState::Cooldown)
+	{
+		HandleCooldown();
+	}
 }
 
 void ASPlayerController::OnRep_MatchState()
@@ -320,8 +331,15 @@ void ASPlayerController::OnRep_MatchState()
 
 
 
-void ASPlayerController::HandleMatchHasStarted()
+void ASPlayerController::HandleMatchHasStarted(bool bIsTeamMatch)
 {
+	UE_LOG(LogTemp, Warning, TEXT("%s %s %d"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, bIsTeamMatch);
+	if (HasAuthority())
+	{
+		bShowTeamScores = bIsTeamMatch;
+		OnRep_ShowTeamScores();
+	}
+	
 	if (IsLocalController())
 	{
 		if (HUD->Announcement)
@@ -335,6 +353,66 @@ void ASPlayerController::HandleMatchHasStarted()
 	}
 }
 
+FString ASPlayerController::GetInfoText(const TArray<ASPlayerState*>& TopPlayers)
+{
+	FString InfoTextString;
+	if (TopPlayers.IsEmpty())
+	{
+		InfoTextString = Announcement::ThereIsNoWinner;
+	}
+	else if (TopPlayers.Num() == 1 && TopPlayers[0] == ShooterPlayerState)
+	{
+		InfoTextString = Announcement::YouAreTheWinner;
+	}
+	else if (TopPlayers.Num() == 1)
+	{
+		InfoTextString = FString::Printf(TEXT("Winner:\n%s"), *TopPlayers[0]->GetPlayerName());
+	}
+	else
+	{
+		InfoTextString = Announcement::PlayersTiedForTheWin;
+		for (const ASPlayerState* TiedPlayer : TopPlayers)
+		{
+			InfoTextString.Append(FString::Printf(TEXT("\n%s"), *TiedPlayer->GetPlayerName()));
+		}
+	}
+	return InfoTextString;
+}
+
+FString ASPlayerController::GetTeamsInfoText(ASGameState* ShooterGameState)
+{
+	FString InfoTextString;
+	if (ShooterGameState)
+	{
+		const int32 RedTeamScore = ShooterGameState->RedTeamScore;
+		const int32 BlueTeamScore = ShooterGameState->BlueTeamScore;
+
+		if (RedTeamScore == 0 && BlueTeamScore == 0)
+		{
+			InfoTextString = Announcement::ThereIsNoWinner;
+		}
+		else if (RedTeamScore == BlueTeamScore)
+		{
+			InfoTextString = Announcement::TeamsTiedForTheWin;
+			InfoTextString.Append(FString::Printf(TEXT("\n%s"), *Announcement::RedTeam));
+			InfoTextString.Append(FString::Printf(TEXT("\n%s"), *Announcement::BlueTeam));
+		}
+		else if (RedTeamScore > BlueTeamScore)
+		{
+			InfoTextString = Announcement::RedTeamWins;
+			InfoTextString.Append(FString::Printf(TEXT("\n%s: %d"), *Announcement::RedTeam, RedTeamScore));
+			InfoTextString.Append(FString::Printf(TEXT("\n%s: %d"), *Announcement::BlueTeam, BlueTeamScore));
+		}
+		else
+		{
+			InfoTextString = Announcement::BlueTeamWins;
+			InfoTextString.Append(FString::Printf(TEXT("\n%s: %d"), *Announcement::BlueTeam, BlueTeamScore));
+			InfoTextString.Append(FString::Printf(TEXT("\n%s: %d"), *Announcement::RedTeam, RedTeamScore));
+		}
+	}
+	return InfoTextString;
+}
+
 void ASPlayerController::HandleCooldown()
 {
 	if (IsLocalController())
@@ -342,35 +420,13 @@ void ASPlayerController::HandleCooldown()
 		HUD->ShowAnnouncement(true);
 		HUD->ShowOverlay(false);
 
-		const FString AnnouncementText("New Match Starts In: ");
+		const FString AnnouncementText(Announcement::NewMatchStartsIn);
 		HUD->Announcement->AnnouncementText->SetText(FText::FromString(AnnouncementText));
-		
 		
 		if (ASGameState* GS = Cast<ASGameState>(UGameplayStatics::GetGameState(this)))
 		{
-			ASPlayerState* PS = GetPlayerState<ASPlayerState>();
 			TArray<ASPlayerState*> TopPlayers = GS->TopScoringPlayers;
-			FString InfoTextString;
-			if (TopPlayers.IsEmpty())
-			{
-				InfoTextString = "There is no winner.";
-			}
-			else if (TopPlayers.Num() == 1 && TopPlayers[0] == PS)
-			{
-				InfoTextString = "You are the winner!";
-			}
-			else if (TopPlayers.Num() == 1)
-			{
-				InfoTextString = FString::Printf(TEXT("Winner:\n%s"), *TopPlayers[0]->GetPlayerName());
-			}
-			else
-			{
-				InfoTextString = "Players tied for the win:\n";
-				for (ASPlayerState* TiedPlayer : TopPlayers)
-				{
-					InfoTextString.Append(FString::Printf(TEXT("%s\n"), *TiedPlayer->GetPlayerName()));
-				}
-			}
+			const FString InfoTextString = bShowTeamScores ? GetTeamsInfoText(GS) : GetInfoText(GS->TopScoringPlayers);
 			
 			HUD->Announcement->InfoText->SetText(FText::FromString(InfoTextString));
 		}
@@ -531,10 +587,54 @@ void ASPlayerController::SetHUDGrenades(int32 Grenades)
 	}
 }
 
+void ASPlayerController::SetHUDRedTeamScore(int32 Score)
+{
+	if (IsLocalController())
+	{
+		HUD->CharacterOverlay->RedTeamScore->SetText(FText::FromString(FString::FromInt(Score)));
+	}
+}
+
+void ASPlayerController::SetHUDBlueTeamScore(int32 Score)
+{
+	if (IsLocalController())
+	{
+		HUD->CharacterOverlay->BlueTeamScore->SetText(FText::FromString(FString::FromInt(Score)));
+	}
+}
+
+void ASPlayerController::HideTeamScores()
+{
+	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR);
+	if (IsLocalController())
+	{
+		HUD->CharacterOverlay->RedTeamScore->SetText(FText());
+		HUD->CharacterOverlay->BlueTeamScore->SetText(FText());
+		HUD->CharacterOverlay->ScoreSpacerText->SetText(FText());
+	}
+}
+
+void ASPlayerController::InitTeamScores()
+{
+	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR);
+	if (IsLocalController())
+	{
+		HUD->CharacterOverlay->RedTeamScore->SetText(FText::FromString("0"));
+		HUD->CharacterOverlay->BlueTeamScore->SetText(FText::FromString("0"));
+		HUD->CharacterOverlay->ScoreSpacerText->SetText(FText::FromString("|"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Not Local"))
+	}
+}
+
 void ASPlayerController::BroadcastElimination(APlayerState* Attacker, APlayerState* Victim)
 {
 	ClientEliminationAnnouncement(Attacker, Victim);
 }
+
+
 
 void ASPlayerController::ClientEliminationAnnouncement_Implementation(APlayerState* Attacker, APlayerState* Victim)
 {
@@ -563,6 +663,22 @@ void ASPlayerController::ClientEliminationAnnouncement_Implementation(APlayerSta
 			{
 				HUD->AddEliminationAnnouncement(Attacker->GetPlayerName(), Victim->GetPlayerName());
 			}
+		}
+	}
+}
+
+void ASPlayerController::OnRep_ShowTeamScores()
+{
+	UE_LOG(LogTemp, Warning, TEXT("%s %s %d"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, bShowTeamScores)
+	if (IsLocalController())
+	{
+		if (bShowTeamScores)
+		{
+			InitTeamScores();
+		}
+		else
+		{
+			HideTeamScores();
 		}
 	}
 }

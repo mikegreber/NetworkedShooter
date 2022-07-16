@@ -137,7 +137,9 @@ void ASCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	SetPlayerState(GetPlayerState());
+	ShooterGameMode = GetWorld()->GetAuthGameMode<ASGameMode>();
+
+	SetShooterPlayerState(GetPlayerState());
 	SetGameState(GetWorld()->GetGameState());
 	
 	if (HasAuthority()) SpawnDefaultWeapon();
@@ -200,7 +202,7 @@ void ASCharacter::PossessedBy(AController* NewController)
 	ASPlayerController* OldController = ShooterPlayerController;
 	Super::PossessedBy(NewController);
 	SetPlayerController(NewController, OldController);
-	SetPlayerState(GetPlayerState());
+	SetShooterPlayerState(GetPlayerState());
 }
 
 // called on clients only
@@ -210,7 +212,7 @@ void ASCharacter::OnRep_Controller()
 	ASPlayerController* OldController = ShooterPlayerController;
 	Super::OnRep_Controller();
 	SetPlayerController(Controller, OldController);
-	SetPlayerState(GetPlayerState());
+	SetShooterPlayerState(GetPlayerState());
 }
 
 void ASCharacter::SetPlayerController(AController* NewController, AController* OldController)
@@ -232,7 +234,7 @@ void ASCharacter::SetPlayerController(AController* NewController, AController* O
 void ASCharacter::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
-	SetPlayerState(GetPlayerState());
+	SetShooterPlayerState(GetPlayerState());
 }
 
 void ASCharacter::CheckLead()
@@ -246,13 +248,44 @@ void ASCharacter::CheckLead()
 	}
 }
 
-void ASCharacter::SetPlayerState(APlayerState* NewPlayerState)
+void ASCharacter::SetTeamColor(ETeam NewTeam)
+{
+	if (!GetMesh()) return;
+	
+	switch (NewTeam)
+	{
+	case ETeam::ET_NoTeam:
+		{
+			GetMesh()->SetMaterial(0, OriginalMaterialInstance);
+			DissolveMaterialInstance = BlueDissolveMaterialInstance;
+			break;
+		}
+	case ETeam::ET_RedTeam:
+		{
+			GetMesh()->SetMaterial(0, RedMaterialInstance);
+			DissolveMaterialInstance = RedDissolveMaterialInstance;
+			break;
+		}
+	case ETeam::ET_BlueTeam:
+		{
+			GetMesh()->SetMaterial(0, BlueMaterialInstance);
+			DissolveMaterialInstance = BlueDissolveMaterialInstance;
+			break;
+		}
+	default: ;
+	}
+}
+
+void ASCharacter::SetShooterPlayerState(APlayerState* NewPlayerState)
 {
 	const ASPlayerState* OldPlayerState = ShooterPlayerState;
 	ShooterPlayerState = Cast<ASPlayerState>(NewPlayerState);
 	if (ShooterPlayerState && ShooterPlayerState != OldPlayerState)
 	{
 		CheckLead();
+
+		SetTeamColor(ShooterPlayerState->GetTeam());
+		
 		OnPlayerStateSet.Broadcast(ShooterPlayerState);
 		OnPlayerStateSet.Clear();
 	}
@@ -786,7 +819,9 @@ void ASCharacter::OnKilled(AController* InstigatorController)
 
 void ASCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser)
 {
-	if (bEliminated) return;
+	if (!ShooterGameMode || bEliminated) return;
+
+	Damage = ShooterGameMode->CalculateDamage(InstigatorController, Controller, Damage);
 	
 	const float LastShield = Shield;
 	Shield = ClampWithOverflow(Shield - Damage, 0.f, MaxShield, Damage);
