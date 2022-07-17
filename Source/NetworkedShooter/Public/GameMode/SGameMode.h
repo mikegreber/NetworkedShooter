@@ -17,10 +17,16 @@ class NETWORKEDSHOOTER_API ASGameMode : public AGameMode
 {
 	GENERATED_BODY()
 
+protected:
+	UPROPERTY(EditAnywhere, Category = "Settings")
+	FString MenuName;
+	
 public:
 
 	ASGameMode();
 
+	virtual void StartPlay() override;
+	
 	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void PlayerEliminated(class ASCharacter* EliminatedCharacter, AController* VictimController, AController* KillerController);
@@ -30,20 +36,24 @@ public:
 	void PlayerLeftGame(class ASPlayerState* PlayerLeaving);
 
 	virtual float CalculateDamage(AController* Attacker, AController* Victim, float BaseDamage);
+	FORCEINLINE const FString& GetMenuName() const { return MenuName; };
+	
 
 public:
-	UPROPERTY(EditDefaultsOnly)
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Settings")
 	float WarmupTime = 10.f;
 
-	UPROPERTY(EditDefaultsOnly)
+	UPROPERTY(EditDefaultsOnly, Category = "Settings")
     float MatchTime = 120.f;
 
-	UPROPERTY(EditDefaultsOnly)
+	UPROPERTY(EditDefaultsOnly, Category = "Settings")
 	float CooldownTime = 10.f;
     	
 	float LevelStartingTime = 0.f;
 
 	bool bIsTeamsMatch = false;
+	
 protected:
 	virtual void BeginPlay() override;
 	

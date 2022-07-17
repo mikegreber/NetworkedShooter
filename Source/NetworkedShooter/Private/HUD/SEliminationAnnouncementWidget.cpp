@@ -13,8 +13,7 @@ void USEliminationAnnouncementWidget::SetEliminationAnnouncementText(FString Att
 	{
 		USEliminationAnnouncementText* AnnouncementTextWidget = CreateWidget<USEliminationAnnouncementText>(this, AnnouncementTextClass);
 		AnnouncementTextWidget->TextBlock->SetText(FText::FromString(EliminationAnnouncementString));
-		AnnouncementBox->InsertChildAt(AnnouncementBox->GetChildrenCount(), AnnouncementTextWidget);
-
+		AnnouncementBox->AddChildToVerticalBox(AnnouncementTextWidget);
 		FTimerHandle Handle;
 		GetWorld()->GetTimerManager().SetTimer(
 			Handle,

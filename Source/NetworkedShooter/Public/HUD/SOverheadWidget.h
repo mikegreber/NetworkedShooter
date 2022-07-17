@@ -19,7 +19,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	class UTextBlock* DisplayText;
 
-	void SetDisplayText(FString TextToDisplay);
+	void SetDisplayText(FString TextToDisplay, FColor Color = FColor(255,255,255));
 
 	UFUNCTION(BlueprintCallable)
 	void ShowPlayerNetRole(APawn* InPawn);

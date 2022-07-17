@@ -4,6 +4,7 @@
 #include "PlayerController/SPlayerController.h"
 
 #include "Character/SCharacter.h"
+#include "Character/SCharacter_Lobby.h"
 #include "Components/Image.h"
 #include "Components/SCombatComponent.h"
 #include "Components/TextBlock.h"
@@ -45,6 +46,8 @@ void ASPlayerController::BeginPlay()
 	
 	if (IsLocalController())
 	{
+		SetInputMode(FInputModeGameOnly());
+		
 		InitHUD();
 		SetGameState(GetWorld()->GetGameState());
 
@@ -176,6 +179,10 @@ void ASPlayerController::SetPlayerState(APlayerState* NewPlayerState)
 	OnPlayerStateSet.Broadcast(ShooterPlayerState);
 	
 	if (ShooterPlayerState && IsLocalPlayerController()) PlayerStateHUDInit();
+	if (ASCharacter_Lobby* LobbyCharacter = ShooterPlayerState->GetPawn<ASCharacter_Lobby>())
+	{
+		LobbyCharacter->SetTopOverheadText(ShooterPlayerState->GetPlayerName());
+	}
 }
 
 void ASPlayerController::OnPossess(APawn* NewPawn)

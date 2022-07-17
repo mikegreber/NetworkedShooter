@@ -18,6 +18,13 @@ namespace MatchState
 ASGameMode::ASGameMode()
 {
 	bDelayedStart = true;
+	MenuName = FString("Free For All");
+}
+
+void ASGameMode::StartPlay()
+{
+	Super::StartPlay();
+	
 }
 
 void ASGameMode::BeginPlay()

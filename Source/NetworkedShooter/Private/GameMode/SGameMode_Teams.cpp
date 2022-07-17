@@ -10,6 +10,7 @@
 ASGameMode_Teams::ASGameMode_Teams()
 {
 	bIsTeamsMatch = true;
+	MenuName = FString("Team Death Match");
 }
 
 

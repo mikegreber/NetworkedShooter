@@ -4,11 +4,12 @@
 
 #include "Components/TextBlock.h"
 
-void USOverheadWidget::SetDisplayText(FString TextToDisplay)
+void USOverheadWidget::SetDisplayText(FString TextToDisplay, FColor Color)
 {
 	if (DisplayText)
 	{
 		DisplayText->SetText(FText::FromString(TextToDisplay));
+		DisplayText->SetColorAndOpacity(FSlateColor(Color));
 	}
 }
 

@@ -18,8 +18,10 @@ public class NetworkedShooter : ModuleRules
 			"OnlineSubsystem", 
 			"OnlineSubsystemSteam", 
 			"MultiplayerSessions", 
-			"UMG", 
+			"UMG",
 			"Niagara"
 		});
+		
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 	}
 }
