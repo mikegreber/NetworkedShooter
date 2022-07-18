@@ -2,7 +2,7 @@
 
 Multiplayer Third Person Shooter developed with Unreal Engine 5.
 
-[Download Link](https://drive.google.com/file/d/17RYx48NFK0oI4qcTVLHGbeB5sb-J6XwV/view?usp=sharing) - Requires Steam open and logged in for multiplayer.
+[Download Link](https://drive.google.com/file/d/17RYx48NFK0oI4qcTVLHGbeB5sb-J6XwV/view?usp=sharing) - requires Steam is open and logged in for multiplayer.
 
 Game Assets: Licensed for use with the Unreal Engine only.
 
