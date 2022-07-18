@@ -2,12 +2,16 @@
 
 Multiplayer Third Person Shooter developed with Unreal Engine 5.
 
+[Download Link](https://drive.google.com/file/d/17RYx48NFK0oI4qcTVLHGbeB5sb-J6XwV/view?usp=sharing) - Requires Steam open and logged in for multiplayer.
+
 Game Assets: Licensed for use with the Unreal Engine only.
 
 # Project Features:
-- MultiplayerSessions plugin created to easily host and join games through Steam.
-- Main menu to Host/Join a game
-- Client-Side prediction for smooth weapon firing and ammo replication
+- Client-Side prediction and server-side rewind for smooth weapon firing and ammo replication
+- MultiplayerSessions plugin to easily host and join games through Steam.
+- Lobby system for selecting map and game mode - starts game when all players are ready
+- Free For All and Team Deathmatch game modes
+- 2 Maps
 - Projectile Weapons
   - Assault Rifle
   - Grenade Launcher
