@@ -12,7 +12,10 @@ Game Assets: Licensed for use with the Unreal Engine only.
   - MultiplayerSessions plugin to easily host and join games through Steam.
   - Lobby system for selecting map and game mode - starts game when all players are ready
   - All features are networked
-- Free For All and Team Deathmatch game modes
+- GameModes
+  - Free For All and Team Deathmatch game modes
+  - Warmup, Playing, and Cooldown phase for rounds
+  - Kills and Deaths tracked for each player
 - 2 Maps
 - Projectile Weapons
   - Assault Rifle
@@ -30,9 +33,6 @@ Game Assets: Licensed for use with the Unreal Engine only.
   - Reactive crosshairs for weapons
   - Clean delegate use to drive UI
 - Health, Shield, Speed Boost, Jump Boost, and Ammo pickups
-- GameMode Logic
-  - Warmup, Playing, and Cooldown phase for rounds
-  - Kills and Deaths tracked for each player
 
 # Controls
 - WASD - Movement
