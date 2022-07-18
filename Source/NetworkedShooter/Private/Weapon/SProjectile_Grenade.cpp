@@ -3,8 +3,10 @@
 
 #include "Weapon/SProjectile_Grenade.h"
 
+#include "Character/SCharacter.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "PlayerController/SPlayerController.h"
 #include "Sound/SoundCue.h"
 
 ASProjectile_Grenade::ASProjectile_Grenade()
@@ -23,7 +25,16 @@ ASProjectile_Grenade::ASProjectile_Grenade()
 
 void ASProjectile_Grenade::Destroyed()
 {
-	ApplyDamage(this, GetActorLocation(), nullptr, Damage, GetInstigatorController(), GetInstigator(), UDamageType::StaticClass());
+	if (HasAuthority())
+	{
+		if (const ASCharacter* OwnerCharacter = GetInstigator<ASCharacter>())
+		{
+			if (ASPlayerController* OwnerController = OwnerCharacter->GetPlayerController())
+			{
+				ApplyDamage(this, GetActorLocation(), nullptr, Damage, OwnerController, this, UDamageType::StaticClass());
+			}
+		}
+	}
 	
 	Super::Destroyed();
 }

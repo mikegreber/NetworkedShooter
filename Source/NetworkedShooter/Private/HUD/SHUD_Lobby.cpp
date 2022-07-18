@@ -31,8 +31,6 @@ bool ASHUD_Lobby::Initialize()
 			for (const TSubclassOf<ASGameMode>& Mode : GameModeOptions)
 			{
 				GameModeComboBox->AddOption(Mode->GetDefaultObject<ASGameMode>()->GetMenuName());
-				UE_LOG(LogTemp, Warning, TEXT("%s"), *Mode->GetPathName())
-				
 			}
 				
 			GameModeComboBox->SetSelectedIndex(0);

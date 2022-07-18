@@ -12,7 +12,13 @@ class NETWORKEDSHOOTER_API ASProjectile : public AActor
 	GENERATED_BODY()
 
 public:
-	
+
+	UPROPERTY(EditAnywhere, Category = "Damage")
+    float Damage = 20.f;
+
+    UPROPERTY(EditAnywhere, Category = "Damage")
+    float HeadshotDamage = 30.f;
+    	
 	UPROPERTY(EditAnywhere, Category = "Properties | Projectile")
 	float InitialSpeed = 150000.f;
 
@@ -59,9 +65,6 @@ public:
 	bool bUseServerSideRewind = false;
 	FVector_NetQuantize TraceStart;
 	FVector_NetQuantize100 InitialVelocity;
-	
-	float Damage;
-	float HeadshotDamage;
 
 protected:
 	

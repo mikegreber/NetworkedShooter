@@ -102,7 +102,7 @@ void ASPlayerController_Lobby::OnCountdownTimeUpdated(int32 CountdownTime)
 {
 	if (CountdownTime >= 0)
 	{
-		HUD->CountdownText->SetText(FText::FromString(FString::FromInt(CountdownTime)));
+		HUD->CountdownText->SetText(FText::FromString(FString::Printf(TEXT("Game Starting In\n%d"), CountdownTime)));
 	}
 	else
 	{
