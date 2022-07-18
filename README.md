@@ -24,6 +24,7 @@ Game Assets: Licensed for use with the Unreal Engine only.
 - Throw Grenades
 - UI Elements
   - Health, Shield, Game Time, Kills, Deaths, Ammo, and Grenades elements built with UMG
+  - Kill announcements
   - Reactive crosshairs for weapons
   - Clean delegate use to drive UI
 - Health, Shield, Speed Boost, Jump Boost, and Ammo pickups
