@@ -47,6 +47,7 @@ class NETWORKEDSHOOTER_API ASHUD_Lobby : public AHUD
 	UPROPERTY() class UComboBoxString* GameModeComboBox;
 	UPROPERTY() class UComboBoxString* MapComboBox;
 	UPROPERTY() class UImage* MapThumbnail;
+	UPROPERTY() class UButton* ReturnToMainMenuButton;
 	
 protected:
 	

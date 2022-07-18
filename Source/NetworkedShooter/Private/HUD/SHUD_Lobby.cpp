@@ -17,6 +17,7 @@ bool ASHUD_Lobby::Initialize()
 		Overlay = CreateWidget<USOverlay_Lobby>(GetOwningPlayerController(), LobbyOverlayClass);
 		Overlay->AddToViewport();
 		ReadyButton = Overlay->ReadyButton;
+		ReturnToMainMenuButton = Overlay->ReturnToMainMenuButton;
 		ReadyText = Overlay->ReadyText;
 		PlayersReadyText = Overlay->PlayersReadyText;
 		GameModeComboBox = Overlay->GameModeComboBox;

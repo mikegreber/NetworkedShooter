@@ -28,7 +28,6 @@ public:
 	void FindSessions(int32 MaxSearchResults);
 	void JoinSession(const FOnlineSessionSearchResult& Result);
 	void DestroySession();
-	void StartSession();
 
 	// custom delegates for subsystem
 	FSubsystemOnCreateSessionComplete SubsystemOnCreateSessionComplete;

@@ -23,6 +23,9 @@ protected:
 	class UButton* ReadyButton;
 
 	UPROPERTY(meta = (BindWidget))
+	UButton* ReturnToMainMenuButton;
+
+	UPROPERTY(meta = (BindWidget))
 	class UTextBlock* ReadyText;
 
 	UPROPERTY(meta = (BindWidget))

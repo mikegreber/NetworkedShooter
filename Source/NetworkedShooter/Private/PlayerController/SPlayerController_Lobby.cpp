@@ -3,6 +3,7 @@
 
 #include "PlayerController/SPlayerController_Lobby.h"
 
+#include "MultiplayerSessionsSubsystem.h"
 #include "Character/SCharacter_Lobby.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxKey.h"
@@ -172,6 +173,8 @@ void ASPlayerController_Lobby::InitializeHUD()
 				HUD->GameModeComboBox->SetIsEnabled(false);
 				HUD->MapComboBox->SetIsEnabled(false);
 			}
+
+			HUD->ReturnToMainMenuButton->OnClicked.AddDynamic(this, &ASPlayerController_Lobby::OnReturnToMainMenuButtonClicked);
 		}
 	}
 	else
@@ -216,6 +219,37 @@ void ASPlayerController_Lobby::OnReadyButtonClicked()
 	if (LobbyPlayerState)
 	{
 		LobbyPlayerState->ToggleReady();
+	}
+}
+
+void ASPlayerController_Lobby::OnSessionDestroyComplete(bool bWasSuccessful)
+{
+	if (!bWasSuccessful)
+	{
+		HUD->ReturnToMainMenuButton->SetIsEnabled(true);
+		return;
+	}
+	
+	if (AGameModeBase* GameMode = GetWorld()->GetAuthGameMode<AGameModeBase>())
+	{
+		GameMode->ReturnToMainMenuHost();
+	}
+	else
+	{
+		if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
+		{
+			PlayerController->ClientReturnToMainMenuWithTextReason(FText());
+		}
+	}
+}
+
+void ASPlayerController_Lobby::OnReturnToMainMenuButtonClicked()
+{
+	HUD->ReturnToMainMenuButton->SetIsEnabled(false);
+	if (UMultiplayerSessionsSubsystem* MultiplayerSessionsSubsystem = GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>())
+	{
+		MultiplayerSessionsSubsystem->SubsystemOnDestroySessionComplete.AddDynamic(this, &ASPlayerController_Lobby::OnSessionDestroyComplete);
+		MultiplayerSessionsSubsystem->DestroySession();
 	}
 }
 

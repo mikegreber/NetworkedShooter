@@ -44,7 +44,7 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	
+
 	void InitializeHUD();
 	
 	void SetLobbyGameState(AGameStateBase* NewGameState);
@@ -68,6 +68,12 @@ private:
 	
 	UFUNCTION()
 	void OnReadyButtonClicked();
+
+	UFUNCTION()
+	void OnSessionDestroyComplete(bool bBWasSuccessful);
+	
+	UFUNCTION()
+	void OnReturnToMainMenuButtonClicked();
 	
 };
 

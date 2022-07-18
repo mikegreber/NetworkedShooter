@@ -38,16 +38,6 @@ void UMenu::OnCreateSession(bool bWasSuccessful)
 {
 	if (bWasSuccessful)
 	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Yellow,
-				FString::Printf(TEXT("Session Created Successfully"))
-				);
-		}
-
 		if (UWorld* World = GetWorld())
 		{
 			if (!World->ServerTravel(PathToLobby))
@@ -172,8 +162,6 @@ void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch, FStr
 
 void UMenu::OnHostButtonClicked()
 {
-	UE_LOG(LogTemp, Log, TEXT("Host Button Clicked"));
-	
 	HostButton->SetIsEnabled(false);
 	
 	if (MultiplayerSessionsSubsystem)
@@ -184,8 +172,6 @@ void UMenu::OnHostButtonClicked()
 
 void UMenu::OnJoinButtonClicked()
 {
-	UE_LOG(LogTemp, Log, TEXT("Join Button Clicked"));
-
 	JoinButton->SetIsEnabled(false);
 	
 	if (MultiplayerSessionsSubsystem)
