@@ -7,11 +7,13 @@
 #include "Components/Button.h"
 #include "Components/ComboBoxKey.h"
 #include "Components/ComboBoxString.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "GameMode/SGameMode.h"
 #include "GameMode/SGameMode_Lobby.h"
 #include "GameState/SGameState_Lobby.h"
 #include "HUD/SHUD_Lobby.h"
+#include "Library/ShooterGameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "PlayerState/SPlayerState_Lobby.h"
@@ -69,13 +71,14 @@ void ASPlayerController_Lobby::ClientNotifyMapSelectionChanged_Implementation(in
 	if (IsLocalController())
 	{
 		HUD->MapComboBox->SetSelectedIndex(SelectedIndex);
-		HUD->MapComboBox->SetSelectedOption(HUD->MapOptions[SelectedIndex].PrimaryAssetName.ToString());
+		HUD->MapComboBox->SetSelectedOption(HUD->MapOptions[SelectedIndex].DisplayName);
+		HUD->MapThumbnail->SetBrushFromTexture(HUD->MapOptions[SelectedIndex].Thumbnail);
 
 		if (HasAuthority())
 		{
 			if (ASGameMode_Lobby* LobbyGameMode = GetWorld()->GetAuthGameMode<ASGameMode_Lobby>())
 			{
-				LobbyGameMode->SelectedMap = HUD->MapOptions[SelectedIndex];
+				LobbyGameMode->SelectedMap = HUD->MapOptions[SelectedIndex].Map;
 			}
 		}
 	}

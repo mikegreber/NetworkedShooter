@@ -4,9 +4,11 @@
 #include "HUD/SHUD_Lobby.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "GameMode/SGameMode.h"
 #include "GameMode/SGameMode_Lobby.h"
+#include "Library/ShooterGameplayStatics.h"
 
 bool ASHUD_Lobby::Initialize()
 {
@@ -19,6 +21,7 @@ bool ASHUD_Lobby::Initialize()
 		PlayersReadyText = Overlay->PlayersReadyText;
 		GameModeComboBox = Overlay->GameModeComboBox;
 		MapComboBox = Overlay->MapComboBox;
+		MapThumbnail = Overlay->MapThumbnail;
 		
 		CountdownText = Overlay->CountdownText;
 		CountdownText->SetText(FText());
@@ -43,19 +46,19 @@ bool ASHUD_Lobby::Initialize()
 
 		if (!MapOptions.IsEmpty())
 		{
-			for (const FPrimaryAssetId& Map : MapOptions)
+			for (const FMapInfo& MapInfo : MapOptions)
 			{
-				MapComboBox->AddOption(Map.ToString());
-				UE_LOG(LogTemp, Warning, TEXT("%s"), *Map.ToString())
-				
+				MapComboBox->AddOption(MapInfo.DisplayName);
 			}
 				
 			MapComboBox->SetSelectedIndex(0);
-			MapComboBox->SetSelectedOption(MapOptions[0].ToString());
+			MapComboBox->SetSelectedOption(MapOptions[0].DisplayName);
+			MapThumbnail->SetBrushFromTexture(MapOptions[0].Thumbnail);
 
+			// will succeed on server only
 			if (ASGameMode_Lobby* LobbyGameMode = GetWorld()->GetAuthGameMode<ASGameMode_Lobby>())
 			{
-				LobbyGameMode->SelectedMap = MapOptions[0];
+				LobbyGameMode->SelectedMap = MapOptions[0].Map;
 			}
 		}
 		
@@ -68,5 +71,5 @@ bool ASHUD_Lobby::Initialize()
 void ASHUD_Lobby::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
-	Overlay->RemoveFromParent();
+	if (Overlay) Overlay->RemoveFromParent();
 }

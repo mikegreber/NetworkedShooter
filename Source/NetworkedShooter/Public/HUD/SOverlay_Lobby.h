@@ -36,5 +36,8 @@ protected:
 	
 	UPROPERTY(meta = (BindWidget))
 	UComboBoxString* MapComboBox;
+
+	UPROPERTY(meta = (BindWidget))
+	class UImage* MapThumbnail;
 	
 };

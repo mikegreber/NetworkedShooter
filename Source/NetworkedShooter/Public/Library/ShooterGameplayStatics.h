@@ -38,6 +38,34 @@ public:
 	// same as UGameplayStatics, but always uses GravityOverrideZ
 	static bool PredictProjectilePath(const UObject* WorldContextObject, const FPredictProjectilePathParams& PredictParams, FPredictProjectilePathResult& PredictResult);
 
+	// returns string with all characters removed up to the last '/' character, if there is one, otherwise returns the original string
+	static FString ParseAssetName(const FString& Path)
+	{
+		FString Name = Path;
+
+		int32 Index;
+		if (Name.FindLastChar('/', Index) && Name.Len() > Index + 1)
+		{
+			Name.RemoveAt(0, Index);
+		}
+
+		return Name;
+	}
+
+	// returns string with all characters removed up to the last '/' character, if there is one, otherwise returns the original string
+	static FString ParseAssetName(const FPrimaryAssetId& AssetId)
+	{
+		FString Name = AssetId.ToString();
+
+		int32 Index;
+		if (Name.FindLastChar('/', Index) && Name.Len() > Index + 1)
+		{
+			Name.RemoveAt(0, Index + 1);
+		}
+
+		return Name;
+	}
+	
 	template<class T>
 	static void GetActorsInRadius(const UObject* WorldContextObject, const FVector& Origin, float Radius, TArray<T*>& OutActors, const TArray<AActor*>& IgnoreActors = TArray<AActor*>());
 };

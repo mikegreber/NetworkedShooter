@@ -7,9 +7,22 @@
 #include "GameFramework/HUD.h"
 #include "SHUD_Lobby.generated.h"
 
-/**
- * 
- */
+
+USTRUCT(BlueprintType)
+struct FMapInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere)
+	FPrimaryAssetId Map;
+
+	UPROPERTY(EditAnywhere)
+	FString DisplayName;
+
+	UPROPERTY(EditAnywhere)
+	UTexture2D* Thumbnail;	
+};
+
 UCLASS()
 class NETWORKEDSHOOTER_API ASHUD_Lobby : public AHUD
 {
@@ -21,7 +34,7 @@ class NETWORKEDSHOOTER_API ASHUD_Lobby : public AHUD
 	TArray<TSubclassOf<class ASGameMode>> GameModeOptions;
 
 	UPROPERTY(EditAnywhere, Category = "HUD")
-	TArray<FPrimaryAssetId> MapOptions;
+	TArray<FMapInfo> MapOptions;
 	
 	UPROPERTY(EditAnywhere, Category = "HUD")
 	TSubclassOf<USOverlay_Lobby> LobbyOverlayClass;
@@ -33,6 +46,7 @@ class NETWORKEDSHOOTER_API ASHUD_Lobby : public AHUD
 	UPROPERTY() class UTextBlock* CountdownText;
 	UPROPERTY() class UComboBoxString* GameModeComboBox;
 	UPROPERTY() class UComboBoxString* MapComboBox;
+	UPROPERTY() class UImage* MapThumbnail;
 	
 protected:
 	
