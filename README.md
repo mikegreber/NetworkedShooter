@@ -7,9 +7,11 @@ Multiplayer Third Person Shooter developed with Unreal Engine 5.
 Game Assets: Licensed for use with the Unreal Engine only.
 
 # Project Features:
-- Client-Side prediction and server-side rewind for smooth weapon firing and ammo replication
-- MultiplayerSessions plugin to easily host and join games through Steam.
-- Lobby system for selecting map and game mode - starts game when all players are ready
+- Network
+  - Client-Side prediction and server-side rewind for smooth weapon firing and ammo replication
+  - MultiplayerSessions plugin to easily host and join games through Steam.
+  - Lobby system for selecting map and game mode - starts game when all players are ready
+  - All features are networked
 - Free For All and Team Deathmatch game modes
 - 2 Maps
 - Projectile Weapons
