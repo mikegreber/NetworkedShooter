@@ -22,30 +22,30 @@ void ASGameMode_Lobby::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 
-	if (GameState)
-	{
-		const int32 NumberOfPlayers = GameState.Get()->PlayerArray.Num();
-		
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				1,
-				5.f,
-				FColor::Yellow,
-				FString::Printf(TEXT("Players in game: %d"), NumberOfPlayers)
-				);
-
-			if (const APlayerState* PS = NewPlayer->GetPlayerState<APlayerState>())
-			{
-				GEngine->AddOnScreenDebugMessage(
-					-1,
-					5.f,
-					FColor::Cyan,
-					FString::Printf(TEXT("%s has joined the game!"), *PS->GetPlayerName())
-					);
-			}
-		}
-	}
+	// if (GameState)
+	// {
+	// 	const int32 NumberOfPlayers = GameState.Get()->PlayerArray.Num();
+	// 	
+	// 	if (GEngine)
+	// 	{
+	// 		GEngine->AddOnScreenDebugMessage(
+	// 			1,
+	// 			5.f,
+	// 			FColor::Yellow,
+	// 			FString::Printf(TEXT("Players in game: %d"), NumberOfPlayers)
+	// 			);
+	// 	
+	// 		if (const APlayerState* PS = NewPlayer->GetPlayerState<APlayerState>())
+	// 		{
+	// 			GEngine->AddOnScreenDebugMessage(
+	// 				-1,
+	// 				5.f,
+	// 				FColor::Cyan,
+	// 				FString::Printf(TEXT("%s has joined the game!"), *PS->GetPlayerName())
+	// 				);
+	// 		}
+	// 	}
+	// }
 }
 
 void ASGameMode_Lobby::Logout(AController* Exiting)
@@ -56,21 +56,21 @@ void ASGameMode_Lobby::Logout(AController* Exiting)
 	{
 		const int32 NumberOfPlayers = GameState.Get()->PlayerArray.Num();
 
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				1,
-				5.f,
-				FColor::Yellow,
-				FString::Printf(TEXT("Players in game: %d"), NumberOfPlayers - 1)
-				);
-			
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				5.f,
-				FColor::Cyan,
-				FString::Printf(TEXT("%s has exited the game!"), *PS->GetPlayerName()));
-		}
+		// if (GEngine)
+		// {
+		// 	GEngine->AddOnScreenDebugMessage(
+		// 		1,
+		// 		5.f,
+		// 		FColor::Yellow,
+		// 		FString::Printf(TEXT("Players in game: %d"), NumberOfPlayers - 1)
+		// 		);
+		// 	
+		// 	GEngine->AddOnScreenDebugMessage(
+		// 		-1,
+		// 		5.f,
+		// 		FColor::Cyan,
+		// 		FString::Printf(TEXT("%s has exited the game!"), *PS->GetPlayerName()));
+		// }
 	}
 }
 

@@ -40,6 +40,7 @@ void UMenu::OnCreateSession(bool bWasSuccessful)
 	{
 		if (UWorld* World = GetWorld())
 		{
+			
 			if (!World->ServerTravel(PathToLobby))
 			{
 				if (GEngine)
@@ -126,9 +127,10 @@ void UMenu::OnStartSession(bool bWasSuccessful)
 {
 }
 
-void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch, FString LobbyPath)
+void UMenu::MenuSetup(const FPrimaryAssetId LobbyMap, int32 NumberOfPublicConnections, FString TypeOfMatch)
 {
-	PathToLobby = FString::Printf(TEXT("%s?listen"), *LobbyPath);
+	FString LobbyMapString = LobbyMap.PrimaryAssetName.ToString();
+	PathToLobby = FString::Printf(TEXT("%s?listen"), *LobbyMap.PrimaryAssetName.ToString());
 	NumPublicConnections = NumberOfPublicConnections;
 	MatchType = TypeOfMatch;
 	

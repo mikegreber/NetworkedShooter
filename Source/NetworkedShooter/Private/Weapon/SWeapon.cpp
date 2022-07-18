@@ -21,6 +21,9 @@
 #if WITH_EDITOR
 TAutoConsoleVariable<int32> ASWeapon::CVarDebugWeaponTrace(TEXT("ns.weapon.tracehit"), 0, TEXT("Debug WeaponTraceHit"), ECVF_Cheat);
 #endif
+#if !UE_BUILD_SHIPPING
+TAutoConsoleVariable CVarDebugCanFire(TEXT("ns.weapon.canfire"), false, TEXT("Debug CanFire()"), ECVF_Cheat);
+#endif
 
 ASWeapon::ASWeapon()
 {
@@ -147,12 +150,14 @@ bool ASWeapon::CanUseServerSideRewind() const
 
 bool ASWeapon::CanFire() const
 {
-	if (GEngine)
+#if !UE_BUILD_SHIPPING
+	if (GEngine && CVarDebugCanFire.GetValueOnGameThread())
 	{
 		if (!bCanFire) GEngine->AddOnScreenDebugMessage(-1, 1, FColor::Red, FString::Printf( TEXT("%s bCanFire false"), __FUNCTIONW__));
 		if (!(Ammo > 0)) GEngine->AddOnScreenDebugMessage(-1, 1, FColor::Red, FString::Printf( TEXT("%s Ammo: %d"), __FUNCTIONW__, Ammo));
 		if (!(OwnerComponent->CanFire())) GEngine->AddOnScreenDebugMessage(-1, 1, FColor::Red, FString::Printf( TEXT("%s Owner Component->CanFire() false"), __FUNCTIONW__));
 	}
+#endif
 	
 	return bCanFire && Ammo > 0 && OwnerComponent->CanFire();
 }
