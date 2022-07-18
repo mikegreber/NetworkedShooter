@@ -31,4 +31,13 @@ Game Assets: Licensed for use with the Unreal Engine only.
   - Warmup, Playing, and Cooldown phase for rounds
   - Kills and Deaths tracked for each player
 
+# Controls
+- WASD - Movement
+- E - Pickup Weapon
+- R - Reload
+- T - Throw Grenade
+- Space - Jump
+- Left Shift - Crouch
+- Right Click - Aim
+- Scroll Wheel - Swap Weapons
 
