@@ -54,7 +54,6 @@ void USBuffComponent::BuffSpeed(float BuffBaseSpeed, float BuffCrouchSpeed, floa
 		}
 		MulticastSpeedBuff(BuffBaseSpeed, BuffCrouchSpeed);
 	}
-	
 }
 
 void USBuffComponent::ResetSpeeds()
@@ -65,7 +64,6 @@ void USBuffComponent::ResetSpeeds()
 		Character->GetCharacterMovement()->MaxWalkSpeedCrouched = InitialCrouchSpeed;
 	}
 	MulticastSpeedBuff(InitialBaseSpeed, InitialCrouchSpeed);
-
 }
 
 void USBuffComponent::BuffJump(float JumpZVelocityBuff, float JumpBuffTime)

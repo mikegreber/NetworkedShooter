@@ -83,9 +83,6 @@ void ASWeapon::OnRep_Owner()
 		OwnerComponent = OwnerCharacter->GetCombatComponent();
 		SetPlayerState(OwnerCharacter->GetPlayerState<ASPlayerState>());
 		SetPlayerController(OwnerCharacter->GetController<ASPlayerController>());
-		
-		// make sure all references are set before firing
-		bCanFire = OwnerCharacter && OwnerComponent && OwnerController && OwnerPlayerState;
 	}
 	else
 	{
@@ -95,6 +92,10 @@ void ASWeapon::OnRep_Owner()
 			OnWeaponAmmoChanged.Broadcast(0);
 			OnWeaponAmmoChanged.Clear();
 		}
+
+		// remove scope widget
+		if (ScopeWidget) ScopeWidget->RemoveFromParent();
+		ScopeWidget = nullptr;
 		
 		// clear owner references
 		OwnerCharacter = nullptr;
@@ -105,6 +106,15 @@ void ASWeapon::OnRep_Owner()
 		GetWorldTimerManager().ClearAllTimersForObject(this);
 		
 		bCanFire = false;
+	}
+}
+
+void ASWeapon::CreateScopeWidget(APlayerController* Controller)
+{
+	if (IsLocallyControlled() && ScopeWidgetClass)
+	{
+		ScopeWidget = CreateWidget<USScopeWidget>(Controller, ScopeWidgetClass);
+		if (ScopeWidget) ScopeWidget->AddToViewport();
 	}
 }
 
@@ -136,6 +146,8 @@ void ASWeapon::SetPlayerController(ASPlayerController* NewController)
 		
 		// make sure all references are set before firing
 		bCanFire = OwnerCharacter && OwnerComponent && OwnerController && OwnerPlayerState;
+
+		CreateScopeWidget(OwnerController);
 	}
 	else
 	{
@@ -167,6 +179,8 @@ void ASWeapon::Fire(FVector_NetQuantize HitTarget)
 	if (CanFire())
 	{
 		bCanFire = false;
+
+		OwnerComponent->PlayFireMontage();
 	
 		if (bUseScatter) HitTarget = TraceEndWithScatter(HitTarget);
 
@@ -436,6 +450,11 @@ void ASWeapon::ShowPickupWidget(bool bShowWidget) const
 	{
 		PickupWidget->SetVisibility(bShowWidget);
 	}
+}
+
+void ASWeapon::SetAiming(bool bAiming) const
+{
+	if (ScopeWidget) ScopeWidget->SetAiming(bAiming);
 }
 
 void ASWeapon::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

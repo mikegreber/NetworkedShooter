@@ -1,13 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 #include "Types/HUDPackage.h"
 #include "SHUD.generated.h"
-
-// DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnWidgetsCreated);
 
 UCLASS()
 class NETWORKEDSHOOTER_API ASHUD : public AHUD
@@ -24,8 +20,6 @@ public:
 	UFUNCTION()
 	void UpdateDeaths(int32 NewValue);
 	
-	// void BindDelegates(ASPlayerState* AsPlayerState);
-
 	UPROPERTY(EditAnywhere, Category = "Player Stats")
 	TSubclassOf<class USCharacterOverlay> CharacterOverlayClass;
 	UPROPERTY()
@@ -34,7 +28,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Announcements")
 	TSubclassOf<class USAnnouncementWidget> AnnouncementClass;
 	UPROPERTY()
-	class USAnnouncementWidget* Announcement;
+	USAnnouncementWidget* Announcement;
 
 	void Initialize();
 
@@ -44,14 +38,13 @@ public:
 
 	void CreateEliminationAnnouncement();
 
-	// call before accessing CharacterOverlay
-
 	void ShowOverlay(bool bShowOverlay);
 	
 protected:
 	virtual void BeginPlay() override;
 	
 	void CreateAnnouncement();
+	
 	void CreateOverlay();
 	
 private:

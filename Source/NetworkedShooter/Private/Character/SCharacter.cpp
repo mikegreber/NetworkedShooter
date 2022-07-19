@@ -237,7 +237,7 @@ void ASCharacter::OnRep_PlayerState()
 	SetShooterPlayerState(GetPlayerState());
 }
 
-void ASCharacter::CheckLead()
+void ASCharacter::CheckInLead()
 {
 	if (ShooterPlayerState && GameState)
 	{
@@ -282,7 +282,7 @@ void ASCharacter::SetShooterPlayerState(APlayerState* NewPlayerState)
 	ShooterPlayerState = Cast<ASPlayerState>(NewPlayerState);
 	if (ShooterPlayerState && ShooterPlayerState != OldPlayerState)
 	{
-		CheckLead();
+		CheckInLead();
 
 		SetTeamColor(ShooterPlayerState->GetTeam());
 		
@@ -297,7 +297,7 @@ void ASCharacter::SetGameState(AGameStateBase* NewGameState)
 	if (GameState)
 	{
 		GetWorld()->GameStateSetEvent.RemoveAll(this);
-		CheckLead();
+		CheckInLead();
 	}
 	else
 	{
@@ -402,22 +402,13 @@ void ASCharacter::MulticastEliminated_Implementation(bool bPlayerLeftGame)
 		);
 	}
 
-	if (IsLocallyControlled() &&
-		CombatComponent &&
-		CombatComponent->bAiming &&
-		CombatComponent->EquippedWeapon &&
-		CombatComponent->EquippedWeapon->GetWeaponType() == EWeaponType::EWT_SniperRifle)
-	{
-		ShowSniperScopeWidget(false);
-	}
-
 	if (CrownComponent)
 	{
 		CrownComponent->DestroyComponent();
 	}
 
 	GetWorldTimerManager().SetTimer(
-		EliminatedTimer, 
+		EliminatedTimerHandle, 
 		this,
 		&ASCharacter::EliminatedTimerFinished,
 		EliminatedDelay
@@ -469,73 +460,6 @@ void ASCharacter::Destroyed()
 	if (CombatComponent && CombatComponent->EquippedWeapon && bMatchNotInProgress)
 	{
 		CombatComponent->EquippedWeapon->Destroy();
-	}
-}
-
-void ASCharacter::PlayFireMontage(bool bAiming)
-{
-	if (CombatComponent && CombatComponent->EquippedWeapon)
-	{
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-		if (AnimInstance && FireWeaponMontage)
-		{
-			AnimInstance->Montage_Play(FireWeaponMontage);
-			AnimInstance->Montage_JumpToSection(bAiming ? "RifleAim" : "RifleHip");
-		}
-	}
-}
-
-void ASCharacter::PlayReloadMontage()
-{
-	if (CombatComponent && CombatComponent->EquippedWeapon)
-	{
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-		if (AnimInstance && ReloadMontage)
-		{
-			AnimInstance->Montage_Play(ReloadMontage);
-			FName SectionName;
-			switch(CombatComponent->EquippedWeapon->GetWeaponType())
-			{
-			case EWeaponType::EWT_AssaultRifle:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_RocketLauncher:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_Pistol:
-				{
-					SectionName = "Pistol";
-					break;
-				}
-			case EWeaponType::EWT_SubmachineGun:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_Shotgun:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_SniperRifle:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_GrenadeLauncher:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			default:;
-			}
-			
-			AnimInstance->Montage_JumpToSection(SectionName);
-		}
 	}
 }
 
@@ -970,7 +894,7 @@ bool ASCharacter::IsWeaponEquipped() const
 
 bool ASCharacter::IsAiming() const
 {
-	return CombatComponent && CombatComponent->bAiming;
+	return CombatComponent && CombatComponent->IsAiming();
 }
 
 ASWeapon* ASCharacter::GetEquippedWeapon() const

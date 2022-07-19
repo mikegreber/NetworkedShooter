@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Character/SAnimInstance.h"
 #include "Types/HUDPackage.h"
 #include "Types/SCombatState.h"
 #include "Weapon/SWeaponTypes.h"
@@ -45,6 +46,11 @@ class NETWORKEDSHOOTER_API USCombatComponent : public UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Combat | Zoom")
 	float ZoomInterpSpeed = 20.f;
 
+	UPROPERTY(EditAnywhere, Category = "Combat | Animation")
+	UAnimMontage* FireWeaponMontage;
+
+	UPROPERTY(EditAnywhere, Category = "Combat | Animation")
+	UAnimMontage* ReloadMontage;
 
 public:
 	
@@ -124,6 +130,10 @@ public:
 	
 	void PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount);
 
+	void PlayFireMontage() const;
+	
+	void PlayReloadMontage() const;
+
 protected:
 	
 	void TraceUnderCrosshairs(FHitResult& TraceHitResult);
@@ -202,9 +212,11 @@ protected:
 public:
 	FORCEINLINE bool HasAuthority() const { return bHasAuthority; }
 	FORCEINLINE bool IsLocallyControlled() const { return bIsLocallyControlled; }
-
+	FORCEINLINE bool IsAiming() const { return bAiming; }
 	FORCEINLINE int32 GetCarriedAmmo() const { return CarriedAmmo; };
 	FORCEINLINE int32 GetGrenades() const { return Grenades; }
 	FORCEINLINE bool GetFireButtonPressed() const { return bFireButtonPressed; }
 	FORCEINLINE ESCombatState GetCombatState() const { return CombatState; }
+	FORCEINLINE ASWeapon* GetEquippedWeapon() const { return EquippedWeapon; }
+
 };

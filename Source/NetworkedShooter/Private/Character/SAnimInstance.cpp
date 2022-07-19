@@ -3,6 +3,7 @@
 
 #include "Character/SAnimInstance.h"
 #include "Character/SCharacter.h"
+#include "Components/SCombatComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Weapon/SWeapon.h"
@@ -12,6 +13,10 @@ void USAnimInstance::NativeInitializeAnimation()
 	Super::NativeInitializeAnimation();
 
 	Character = Cast<ASCharacter>(TryGetPawnOwner());
+	if (Character)
+	{
+		CombatComponent = Character->GetCombatComponent();
+	}
 }
 
 void USAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
@@ -22,6 +27,11 @@ void USAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		Character = Cast<ASCharacter>(TryGetPawnOwner());
 		if (Character == nullptr) return;
+	}
+	if (CombatComponent == nullptr)
+	{
+		CombatComponent = Character->GetCombatComponent();
+		if (CombatComponent == nullptr) return;
 	}
 	
 	FVector Velocity = Character->GetVelocity();
@@ -34,9 +44,10 @@ void USAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		bIsAccelerating = MovementComponent->GetCurrentAcceleration().Size() > 0.f ? true : false;
 	}
 
-	bWeaponEquipped = Character->IsWeaponEquipped();
-	EquippedWeapon = Character->GetEquippedWeapon();
-	bAiming = Character->IsAiming();
+	bAiming = CombatComponent->IsAiming();
+	EquippedWeapon = CombatComponent->GetEquippedWeapon();
+	bWeaponEquipped = EquippedWeapon != nullptr;
+	
 	bIsCrouched = Character->bIsCrouched;
 	AO_Yaw = Character->GetAO_Yaw();
 	AO_Pitch = Character->GetAO_Pitch();
@@ -65,11 +76,8 @@ void USAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		Lean = 0.f;
 	}
 	
-	if (bWeaponEquipped && EquippedWeapon && EquippedWeapon->GetWeaponMesh() && Character->GetMesh())
+	if (EquippedWeapon)
 	{
-		
-		
-		// const FVector SocketLocation = EquippedWeapon->GetWeaponMesh()->GetSocketLocation("LeftHandSocket");
 		LeftHandTransform = EquippedWeapon->GetWeaponMesh()->GetSocketTransform("LeftHandSocket");
 		FVector OutPosition;
 		FRotator OutRotation;

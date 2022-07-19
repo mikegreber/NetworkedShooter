@@ -4,6 +4,7 @@
 #include "Weapon/SWeapon_Shotgun.h"
 
 #include "Character/SCharacter.h"
+#include "Components/SCombatComponent.h"
 #include "Components/SLagCompensationComponent.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "Kismet/GameplayStatics.h"
@@ -18,6 +19,8 @@ void ASWeapon_Shotgun::Fire(FVector_NetQuantize HitTarget)
 	{
 		bCanFire = false;
 
+		OwnerComponent->PlayFireMontage();
+		
 		// seed for random scatter to replicate spread
 		const int8 Seed = FMath::RoundToInt(GetWorld()->GetTimeSeconds());
 		

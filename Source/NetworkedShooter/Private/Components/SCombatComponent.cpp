@@ -416,15 +416,12 @@ void USCombatComponent::SetAiming(bool bIsAiming)
 		if (IsLocallyControlled()) bAimButtonPressed = bIsAiming;
 		
 		bAiming = bIsAiming;
+
+		EquippedWeapon->SetAiming(bAiming);
 		
 		if (HasAuthority())
 		{
 			OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed = bAiming ? AimWalkSpeed : BaseWalkSpeed;
-
-			if (IsLocallyControlled() && EquippedWeapon->GetWeaponType() == EWeaponType::EWT_SniperRifle)
-			{
-				OwnerCharacter->ShowSniperScopeWidget(bAiming);
-			}
 		}
 		else
 		{
@@ -591,7 +588,7 @@ void USCombatComponent::OnRep_CombatState(ESCombatState OldCombatState)
 		}
 	case ESCombatState::ECS_Reloading:
 		{
-			if (OwnerCharacter) OwnerCharacter->PlayReloadMontage();
+			PlayReloadMontage();
 			break;
 		}
 	case ESCombatState::ECS_ThrowingGrenade:
@@ -605,6 +602,73 @@ void USCombatComponent::OnRep_CombatState(ESCombatState OldCombatState)
 			break;
 		}
 	default:;
+	}
+}
+
+void USCombatComponent::PlayFireMontage() const
+{
+	if (EquippedWeapon)
+	{
+		UAnimInstance* AnimInstance = OwnerCharacter->GetMesh()->GetAnimInstance();
+		if (AnimInstance && FireWeaponMontage)
+		{
+			AnimInstance->Montage_Play(FireWeaponMontage);
+			AnimInstance->Montage_JumpToSection(bAiming ? "RifleAim" : "RifleHip");
+		}
+	}
+}
+
+void USCombatComponent::PlayReloadMontage() const
+{
+	if (EquippedWeapon)
+	{
+		UAnimInstance* AnimInstance = OwnerCharacter->GetMesh()->GetAnimInstance();
+		if (AnimInstance && ReloadMontage)
+		{
+			AnimInstance->Montage_Play(ReloadMontage);
+			FName SectionName;
+			switch(EquippedWeapon->GetWeaponType())
+			{
+			case EWeaponType::EWT_AssaultRifle:
+				{
+					SectionName = "Rifle";
+					break;
+				}
+			case EWeaponType::EWT_RocketLauncher:
+				{
+					SectionName = "Rifle";
+					break;
+				}
+			case EWeaponType::EWT_Pistol:
+				{
+					SectionName = "Pistol";
+					break;
+				}
+			case EWeaponType::EWT_SubmachineGun:
+				{
+					SectionName = "Rifle";
+					break;
+				}
+			case EWeaponType::EWT_Shotgun:
+				{
+					SectionName = "Rifle";
+					break;
+				}
+			case EWeaponType::EWT_SniperRifle:
+				{
+					SectionName = "Rifle";
+					break;
+				}
+			case EWeaponType::EWT_GrenadeLauncher:
+				{
+					SectionName = "Rifle";
+					break;
+				}
+			default:;
+			}
+			
+			AnimInstance->Montage_JumpToSection(SectionName);
+		}
 	}
 }
 

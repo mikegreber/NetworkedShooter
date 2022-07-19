@@ -72,11 +72,9 @@ class NETWORKEDSHOOTER_API ASCharacter : public ACharacter, public ISCrosshairsI
 	UPROPERTY(EditAnywhere, Category = "Player Stats")
 	float MaxShield = 100.f;
 
-	// dynamic instance that we can change at runtime
 	UPROPERTY(VisibleAnywhere, Category = "Elimination")
 	UMaterialInstanceDynamic* DynamicDissolveMaterialInstance;
 
-	// material instance set on the Blueprint, used with the dynamic material instance
 	UPROPERTY(VisibleAnywhere, Category = "Elimination")
 	UMaterialInstance* DissolveMaterialInstance;
 
@@ -148,6 +146,9 @@ private:
 	UPROPERTY(Replicated)
 	bool bDisableGameplay = false;
 	
+	UPROPERTY(Replicated)
+	bool bIsServerControlled;
+	
 	float AO_Yaw;
 	float InterpAO_Yaw;
 	float AO_Pitch;
@@ -161,18 +162,14 @@ private:
 	FRotator ProxyRotation;
 	float TimeSinceLastMovementReplication;
 
-	bool bEliminated;
-
-	FTimerHandle EliminatedTimer;
+	FTimerHandle EliminatedTimerHandle;
 
 	FOnTimelineFloat DissolveTrack;
-
+	
+	bool bEliminated;
+	
 	bool bLeftGame;
 
-	UPROPERTY(Replicated)
-	bool bIsServerControlled;
-	
-	
 public:
 	
 	ASCharacter();
@@ -185,41 +182,33 @@ public:
 	virtual void Destroyed() override;
 	virtual void OnRep_Controller() override;
 	virtual void OnRep_ReplicateMovement() override;
-	
 	virtual void OnRep_PlayerState() override;
-	void CheckLead();
-	void SetTeamColor(ETeam NewTeam);
 
-	void SetShooterPlayerState(APlayerState* NewPlayerState);
-	
-	void PlayFireMontage(bool bAiming);
-	void PlayReloadMontage();
-	void PlayEliminatedMontage();
-	void PlayThrowGrenadeMontage();
-	
-	void Eliminated(bool bPlayerLeftGame);
-	
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastEliminated(bool bPlayerLeftGame);
-
-	UFUNCTION(Server, Reliable)
-	void ServerLeaveGame();
-
-	UFUNCTION(BlueprintImplementableEvent)
-	void ShowSniperScopeWidget(bool bShowScope);
-
-	void SpawnDefaultWeapon() const;
-
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastGainedTheLead();
-
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastLostTheLead();
 protected:
 	
 	virtual void BeginPlay() override;
 	virtual void Jump() override;
 
+public:
+	
+	void CheckInLead();
+	void SetTeamColor(ETeam NewTeam);
+	void SetShooterPlayerState(APlayerState* NewPlayerState);
+	void PlayEliminatedMontage();
+	void PlayThrowGrenadeMontage();
+	void Eliminated(bool bPlayerLeftGame);
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastEliminated(bool bPlayerLeftGame);
+	UFUNCTION(Server, Reliable)
+	void ServerLeaveGame();
+	void SpawnDefaultWeapon() const;
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastGainedTheLead();
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastLostTheLead();
+	
+protected:
+	
 	void MoveForward(float Value);
 	void MoveRight(float Value);
 	void Turn(float Value);
@@ -233,47 +222,36 @@ protected:
 	void FireButtonReleased();
 	void GrenadeButtonPressed();
 	void SwapWeaponsButtonPressed();
-	void CalculateAO_Pitch();
-	void PlayHitReactMontage();
-	float CalculateSpeed() const;
-	void CalculateAimOffset(float DeltaTime);
-	void SimProxiesTurn();
-	void OnKilled(AController* InstigatorController);
-
-	
 	
 	UFUNCTION()
 	void ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser);
 
-	void RotateInPlace(float DeltaTime);
-	
-	void SetPlayerController(AController* NewController, AController* OldController = nullptr);
-
 private:
-	
-	UFUNCTION()
-	void OnRep_OverlappingWeapon(ASWeapon* LastWeapon);
 
+	void SetPlayerController(AController* NewController, AController* OldController = nullptr);
+	void SetGameState(AGameStateBase* NewGameState);
 	UFUNCTION(Server, Reliable)
 	void ServerEquipButtonPressed();
-	
-	void TurnInPlace(float DeltaSeconds);
-	void HideCharacterIfCameraClose() const;
-	
+	UFUNCTION()
+	void OnRep_OverlappingWeapon(ASWeapon* LastWeapon);
 	UFUNCTION()
 	void OnRep_Health(float LastHealth);
-	
 	UFUNCTION()
 	void OnRep_Shield(float LastShield);
-	
 	void EliminatedTimerFinished();
-	
+	void StartDissolve();
 	UFUNCTION()
 	void UpdateDissolveMaterial(float DissolveValue);
-	void StartDissolve();
+	void OnKilled(AController* InstigatorController);
+	void PlayHitReactMontage();
+	void TurnInPlace(float DeltaSeconds);
+	void HideCharacterIfCameraClose() const;
+	void CalculateAO_Pitch();
+	float CalculateSpeed() const;
+	void CalculateAimOffset(float DeltaTime);
+	void SimProxiesTurn();
+	void RotateInPlace(float DeltaTime);
 
-	void SetGameState(AGameStateBase* NewGameState);
-	
 public:
 	
 	void SetOverlappingWeapon(ASWeapon* Weapon);
@@ -305,7 +283,7 @@ public:
 	FORCEINLINE USCombatComponent* GetCombatComponent() const { return CombatComponent; }
 	FORCEINLINE USBuffComponent* GetBuffComponent() const { return BuffComponent; }
 	FORCEINLINE UStaticMeshComponent* GetAttachedGrenade() const { return AttachedGrenade; }
-	FORCEINLINE TMap<FName, UShapeComponent*>& GetRewindColliders() { return RewindCapsules; }
 	FORCEINLINE USLagCompensationComponent* GetLagCompensationComponent() const { return LagCompensationComponent; }
+	FORCEINLINE TMap<FName, UShapeComponent*>& GetRewindColliders() { return RewindCapsules; }
 };
 

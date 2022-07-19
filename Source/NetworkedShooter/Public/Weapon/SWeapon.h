@@ -8,6 +8,7 @@
 #include "Types/CustomDepth.h"
 #include "Types/HUDPackage.h"
 #include "GameFramework/Actor.h"
+#include "HUD/SScopeWidget.h"
 #include "SWeapon.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWeaponAmmoChanged, int32, NewValue);
@@ -86,6 +87,10 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Firing")
 	int32 MagCapacity;
+
+	UPROPERTY(EditAnywhere, Category = "WeaponProperties | Effects")
+	TSubclassOf<USScopeWidget> ScopeWidgetClass;
+	UPROPERTY() USScopeWidget* ScopeWidget;
 	
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Effects | Firing")
 	UAnimationAsset* FireAnimation;
@@ -122,6 +127,8 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Weapon Scatter", meta = (EditCondition = "bUseScatter"))
 	float SphereRadius = 75.f;
 
+
+	
 private:
 	
 	UPROPERTY(Replicated, EditAnywhere, Category = "Weapon Properties | Replication")
@@ -132,17 +139,17 @@ public:
 	FOnWeaponAmmoChanged OnWeaponAmmoChanged;
 
 	bool bDestroyWeaponOnKilled = false;
-	
+
 protected:
 	
 	bool bCanFire;
 	FTimerHandle FireTimer;
 	int32 LocalAmmoDelta = 0;
 	
-	UPROPERTY() class ASCharacter* OwnerCharacter;
-	UPROPERTY() class USCombatComponent* OwnerComponent;
-	UPROPERTY() class ASPlayerController* OwnerController;
-	UPROPERTY() class ASPlayerState* OwnerPlayerState;
+	UPROPERTY() ASCharacter* OwnerCharacter;
+	UPROPERTY() USCombatComponent* OwnerComponent;
+	UPROPERTY() ASPlayerController* OwnerController;
+	UPROPERTY() ASPlayerState* OwnerPlayerState;
 	
 public:
 	
@@ -163,6 +170,8 @@ public:
 	void Holster();
 	
 	void ShowPickupWidget(bool bShowWidget) const;
+	
+	void SetAiming(bool bAiming) const;
 
 protected:
 	
@@ -201,11 +210,13 @@ protected:
 
 	UFUNCTION()
 	void SetPlayerState(ASPlayerState* NewPlayerState);
-
+	
 	UFUNCTION()
 	void SetPlayerController(ASPlayerController* GetController);
 	
 	virtual void OnRep_Owner() override;
+
+	void CreateScopeWidget(APlayerController* Controller);
 	
 	FVector TraceEndWithScatter(const FVector& HitTarget) const;
 	FVector TraceEndWithScatter(const FVector& TraceStart, const FVector& HitTarget) const;
