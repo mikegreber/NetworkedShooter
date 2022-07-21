@@ -2,12 +2,17 @@
 
 
 #include "Weapon/SProjectile.h"
+
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "GameplayEffectTypes.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Components/BoxComponent.h"
 #include "GameFramework/DamageType.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Library/ShooterGameplayStatics.h"
+#include "NetworkedShooter/NetworkedShooter.h"
 #include "Sound/SoundCue.h"
 
 ASProjectile::ASProjectile()
@@ -75,11 +80,10 @@ void ASProjectile::Destroyed()
     }
 }
 
-void ASProjectile::ApplyDamage(const UObject* WorldContextObject, const FVector& Location, AActor* DamagedActor, float BaseDamage, AController* EventInstigator, AActor* DamageCauser, TSubclassOf<UDamageType> DamageTypeClass, ECollisionChannel DamageChannel) const
+void ASProjectile::ApplyDamage(const UObject* WorldContextObject, const FVector& Location, AActor* DamagedActor, float BaseDamage, IAbilitySystemInterface* Source, AActor* DamageCauser, TSubclassOf<UGameplayEffect> DamageEffect, ECollisionChannel DamageChannel) const
 {
-	ExplodeDamage(WorldContextObject, Location, EventInstigator, DamageCauser, BaseDamage, DamageChannel);
+	ExplodeDamage(WorldContextObject, DamageEffect, Location, Source, DamageCauser, BaseDamage, DamageChannel);
 }
-
 
 void ASProjectile::BeginPlay()
 {
@@ -117,23 +121,23 @@ void ASProjectile::SpawnTrailSystem()
 	}
 }
 
-void ASProjectile::ExplodeDamage(const UObject* WorldContextObject, const FVector& Location, AController* EventInstigator, AActor* DamageCauser, float BaseDamage, ECollisionChannel DamageChannel) const
+void ASProjectile::ExplodeDamage(const UObject* WorldContextObject, TSubclassOf<UGameplayEffect> DamageEffect, const FVector& Location, IAbilitySystemInterface* Source, AActor* DamageCauser, float BaseDamage, ECollisionChannel DamageChannel) const
 {
 	if (HasAuthority())
 	{
-		UShooterGameplayStatics::ApplyRadialDamageWithFalloff(
+		UShooterGameplayStatics::ApplyRadialGameplayEffectWithFalloff(
 			WorldContextObject,
-			BaseDamage,
-			10.f,
+			DamageEffect,
 			Location,
+			BaseDamage,
+			1.f,
 			DamageInnerRadius,
 			DamageOuterRadius,
-			1.f,
-			UDamageType::StaticClass(),
-			TArray<AActor*>(),
-			DamageChannel,
+			10.f,
 			DamageCauser,
-			EventInstigator
+			Source,
+			TArray<AActor*>(),
+			DamageChannel
 		);
 	}
 }

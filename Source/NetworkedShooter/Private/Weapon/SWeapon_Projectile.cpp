@@ -17,9 +17,6 @@ void ASWeapon_Projectile::LocalFire(const FTransform& MuzzleTransform, const FVe
 	
 	Super::LocalFire(MuzzleTransform, HitTarget, bIsRewindFire, Seed);
 	
-	APawn* InstigatorPawn = Cast<APawn>(GetOwner());
-	UWorld* World = GetWorld();
-	
 	const FVector MuzzleLocation = MuzzleTransform.GetLocation();
 	const FVector ToTarget = HitTarget - MuzzleLocation;
 	const FRotator TargetRotation = ToTarget.Rotation();
@@ -33,8 +30,9 @@ void ASWeapon_Projectile::LocalFire(const FTransform& MuzzleTransform, const FVe
 	{
 		if (IsLocallyControlled())
 		{
-			ASProjectile* SpawnedProjectile = World->SpawnActor<ASProjectile>(ProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
+			ASProjectile* SpawnedProjectile = GetWorld()->SpawnActor<ASProjectile>(ProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
 			SpawnedProjectile->bUseServerSideRewind = false;
+			SpawnedProjectile->DamageEffectClass = DamageEffectClass;
 			SpawnedProjectile->Damage = Damage;
 			SpawnedProjectile->HeadshotDamage = HeadshotDamage;
 		}
@@ -43,29 +41,30 @@ void ASWeapon_Projectile::LocalFire(const FTransform& MuzzleTransform, const FVe
 	{
 		if (HasAuthority()) // server, not host - spawn non-replicated projectile, use server-side rewind
 		{
-			ASProjectile* SpawnedProjectile = World->SpawnActor<ASProjectile>(ServerSideRewindProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
+			ASProjectile* SpawnedProjectile = GetWorld()->SpawnActor<ASProjectile>(ServerSideRewindProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
 			SpawnedProjectile->bUseServerSideRewind = true;
 		}
 		else  // client
 		{
 			if (IsLocallyControlled()) // client, locally controlled - spawn non-replicated projectile, use server-side rewind
 			{
-				ASProjectile* SpawnedProjectile = World->SpawnActor<ASProjectile>(ServerSideRewindProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
+				ASProjectile* SpawnedProjectile = GetWorld()->SpawnActor<ASProjectile>(ServerSideRewindProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
 				SpawnedProjectile->bUseServerSideRewind = true;
 				SpawnedProjectile->TraceStart = MuzzleLocation;
 				SpawnedProjectile->InitialVelocity = SpawnedProjectile->GetActorForwardVector() * SpawnedProjectile->InitialSpeed;
 			}
 			else // client, not locally controlled - spawn non-replicated projectile, no server-side rewind
 			{
-				ASProjectile* SpawnedProjectile = World->SpawnActor<ASProjectile>(ServerSideRewindProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
+				ASProjectile* SpawnedProjectile = GetWorld()->SpawnActor<ASProjectile>(ServerSideRewindProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
 				SpawnedProjectile->bUseServerSideRewind = false;
 			}
 		}
 	}
 	else if (HasAuthority()) // no server-side rewind, spawn server only
 	{
-		ASProjectile* SpawnedProjectile = World->SpawnActor<ASProjectile>(ProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
+		ASProjectile* SpawnedProjectile = GetWorld()->SpawnActor<ASProjectile>(ProjectileClass, MuzzleLocation, TargetRotation, SpawnParams);
 		SpawnedProjectile->bUseServerSideRewind = false;
+		SpawnedProjectile->DamageEffectClass = DamageEffectClass;
 		SpawnedProjectile->Damage = Damage;
 		SpawnedProjectile->HeadshotDamage = HeadshotDamage;
 	}

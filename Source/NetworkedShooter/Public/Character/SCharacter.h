@@ -9,17 +9,34 @@
 #include "Types/SCombatState.h"
 #include "Types/Team.h"
 #include "Types/TurningInPlace.h"
+#include "GameplayAbilities/Public/AbilitySystemInterface.h"
 #include "SCharacter.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAttributeChanged, float, Value, float, MaxValue);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAttributeChangedd, float, Value, float, MaxValue);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnControllerSet, class ASPlayerController* NewController);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLeftGame);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnEliminated);
 
-UCLASS()
-class NETWORKEDSHOOTER_API ASCharacter : public ACharacter, public ISCrosshairsInteractionInterface
+USTRUCT(BlueprintType)
+struct FTeamMaterial
 {
 	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere)
+	UMaterialInstance* MaterialInstance;
+	
+	UPROPERTY(EditAnywhere)
+	UMaterialInstance* DissolveMaterialInstance;
+};
+
+
+UCLASS()
+class NETWORKEDSHOOTER_API ASCharacter : public ACharacter, public ISCrosshairsInteractionInterface, public IAbilitySystemInterface
+{
+	GENERATED_BODY()
+	
+	UPROPERTY()
+	class USAttributeSet* AttributeSet;
 
 	UPROPERTY(VisibleAnywhere, Category = Camera)
 	class USpringArmComponent* CameraBoom;
@@ -32,9 +49,6 @@ class NETWORKEDSHOOTER_API ASCharacter : public ACharacter, public ISCrosshairsI
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Components, meta = (AllowPrivateAccess = "true"))
 	class USCombatComponent* CombatComponent;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Components, meta = (AllowPrivateAccess = "true"))
-	class USBuffComponent* BuffComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Components, meta = (AllowPrivateAccess = "true"))
 	class USLagCompensationComponent* LagCompensationComponent;
@@ -46,52 +60,19 @@ class NETWORKEDSHOOTER_API ASCharacter : public ACharacter, public ISCrosshairsI
 	float CameraThreshold = 200.f;
 	
 	UPROPERTY(EditAnywhere, Category = Combat)
-	UAnimMontage* FireWeaponMontage;
-
-	UPROPERTY(EditAnywhere, Category = Combat)
-	UAnimMontage* ReloadMontage;
-	
-	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* HitReactMontage;
 
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* ElimMontage;
 
-	UPROPERTY(EditAnywhere, Category = Combat)
-	UAnimMontage* ThrowGrenadeMontage;
-
-	UPROPERTY(ReplicatedUsing=OnRep_Health, VisibleAnywhere, Category = "Player Stats")
-	float Health = 100.f;
+	UPROPERTY(EditAnywhere, Category = "Initialization")
+	TArray<TSubclassOf<class UGameplayEffect>> StartingEffects;
 	
-	UPROPERTY(EditAnywhere, Category = "Player Stats")
-	float MaxHealth = 100.f;
-
-	UPROPERTY(ReplicatedUsing=OnRep_Shield, EditAnywhere, Category = "Player Stats")
-	float Shield = 0.f;
-
-	UPROPERTY(EditAnywhere, Category = "Player Stats")
-	float MaxShield = 100.f;
-
-	UPROPERTY(VisibleAnywhere, Category = "Elimination")
-	UMaterialInstanceDynamic* DynamicDissolveMaterialInstance;
-
-	UPROPERTY(VisibleAnywhere, Category = "Elimination")
-	UMaterialInstance* DissolveMaterialInstance;
-
-	UPROPERTY(EditAnywhere, Category = "Elimination")
-	UMaterialInstance* RedMaterialInstance;
+	UPROPERTY(EditAnywhere, Category = "Initialization")
+	TArray<TSubclassOf<class UGameplayAbility>> StartingAbilities;
 	
-	UPROPERTY(EditAnywhere, Category = "Elimination")
-	UMaterialInstance* RedDissolveMaterialInstance;
-
-	UPROPERTY(EditAnywhere, Category = "Elimination")
-	UMaterialInstance* BlueMaterialInstance;
-	
-	UPROPERTY(EditAnywhere, Category = "Elimination")
-	UMaterialInstance* BlueDissolveMaterialInstance;
-
-	UPROPERTY(EditAnywhere, Category = "Elimination")
-	UMaterialInstance* OriginalMaterialInstance;
+	UPROPERTY(EditAnywhere, EditFixedSize, Category = "Materials")
+	TMap<ETeam, FTeamMaterial> TeamMaterials;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	UParticleSystemComponent* EliminationBotComponent;
@@ -101,43 +82,45 @@ class NETWORKEDSHOOTER_API ASCharacter : public ACharacter, public ISCrosshairsI
 
 	UPROPERTY(EditAnywhere, Category = "Elimination")
 	class USoundCue* EliminationBotSound;
-	
-	UPROPERTY(VisibleAnywhere)
-	UStaticMeshComponent* AttachedGrenade;
-	
-	UPROPERTY(EditAnywhere)
-	TSubclassOf<ASWeapon> DefaultWeaponClass;
-
-	UPROPERTY(EditDefaultsOnly)
-	float EliminatedDelay = 3.f;
-
-	UPROPERTY(VisibleAnywhere)
-	UTimelineComponent* DissolveTimeline;
 
 	UPROPERTY(EditAnywhere, Category = "Elimination")
 	UCurveFloat* DissolveCurve;
 
+	UPROPERTY(VisibleAnywhere)
+	UTimelineComponent* DissolveTimeline;
+	
+	UPROPERTY(VisibleAnywhere)
+	UStaticMeshComponent* AttachedGrenade;
+
+	UPROPERTY(EditDefaultsOnly)
+	float EliminatedDelay = 3.f;
+	
 	UPROPERTY(EditAnywhere)
 	class UNiagaraSystem* CrownSystem;
-	UPROPERTY() class UNiagaraComponent* CrownComponent;
 
 public:
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerStateSet, class ASPlayerState*, NewPlayerState);
 
-	FOnAttributeChanged OnHealthChanged;
-	FOnAttributeChanged OnShieldChanged;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gameplay Abilities")
+	class USAbilitySystemComponent* ASC;
+	
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerStateSet, class ASPlayerState*, NewPlayerState);
+	
 	FOnControllerSet OnPlayerControllerSet;
 	FOnPlayerStateSet OnPlayerStateSet;
 	FOnLeftGame OnLeftGame;
 	FOnEliminated OnEliminated;
 
 protected:
-
+	
+	UPROPERTY() class UAnimInstance* AnimInstance;
 	UPROPERTY() class ASPlayerController* ShooterPlayerController;
 	UPROPERTY() class ASPlayerState* ShooterPlayerState;
 	UPROPERTY() class ASGameState* GameState;
 	UPROPERTY() class ASGameMode* ShooterGameMode;
-	
+	UPROPERTY() UMaterialInstance* DissolveMaterialInstance;
+	UPROPERTY() UMaterialInstanceDynamic* DynamicDissolveMaterialInstance;
+	UPROPERTY() class UNiagaraComponent* CrownComponent;
+
 	UPROPERTY(EditAnywhere)
 	TMap<FName, UShapeComponent*> RewindCapsules;
 
@@ -172,11 +155,16 @@ private:
 
 public:
 	
-	ASCharacter();
+	ASCharacter(const FObjectInitializer& ObjectInitializer);
 
+	// IAbilitySystem Interface start
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	// IAbilitySystem Interface end
+	
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	
 	virtual void PostInitializeComponents() override;
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void Destroyed() override;
@@ -185,23 +173,20 @@ public:
 	virtual void OnRep_PlayerState() override;
 
 protected:
-	
 	virtual void BeginPlay() override;
 	virtual void Jump() override;
+	void InitializeAbilities();
 
 public:
 	
 	void CheckInLead();
 	void SetTeamColor(ETeam NewTeam);
 	void SetShooterPlayerState(APlayerState* NewPlayerState);
-	void PlayEliminatedMontage();
-	void PlayThrowGrenadeMontage();
 	void Eliminated(bool bPlayerLeftGame);
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastEliminated(bool bPlayerLeftGame);
 	UFUNCTION(Server, Reliable)
 	void ServerLeaveGame();
-	void SpawnDefaultWeapon() const;
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastGainedTheLead();
 	UFUNCTION(NetMulticast, Reliable)
@@ -226,6 +211,9 @@ protected:
 	UFUNCTION()
 	void ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser);
 
+	UFUNCTION()
+	void OnHealthChanged(float NewValue, float OldValue);
+	
 private:
 
 	void SetPlayerController(AController* NewController, AController* OldController = nullptr);
@@ -234,16 +222,12 @@ private:
 	void ServerEquipButtonPressed();
 	UFUNCTION()
 	void OnRep_OverlappingWeapon(ASWeapon* LastWeapon);
-	UFUNCTION()
-	void OnRep_Health(float LastHealth);
-	UFUNCTION()
-	void OnRep_Shield(float LastShield);
 	void EliminatedTimerFinished();
 	void StartDissolve();
 	UFUNCTION()
 	void UpdateDissolveMaterial(float DissolveValue);
+	UFUNCTION()
 	void OnKilled(AController* InstigatorController);
-	void PlayHitReactMontage();
 	void TurnInPlace(float DeltaSeconds);
 	void HideCharacterIfCameraClose() const;
 	void CalculateAO_Pitch();
@@ -257,8 +241,6 @@ public:
 	void SetOverlappingWeapon(ASWeapon* Weapon);
 	bool IsWeaponEquipped() const;
 	bool IsAiming() const;
-	void SetHealth(float Amount);
-	void SetShield(float Amount);
 
 	FVector GetHitTarget() const;
 	ASWeapon* GetEquippedWeapon() const;
@@ -274,16 +256,13 @@ public:
 	FORCEINLINE bool IsEliminated() const { return bEliminated; }
 	FORCEINLINE bool IsGameplayDisabled() const { return bDisableGameplay; }
 	FORCEINLINE bool IsServerControlled() const { return bIsServerControlled; };
-	FORCEINLINE float GetHealth() const { return Health; }
-	FORCEINLINE float GetMaxHealth() const { return MaxHealth; }
-	FORCEINLINE float GetShield() const { return Shield; }
-	FORCEINLINE float GetMaxShield() const { return MaxShield; }
 	FORCEINLINE ASPlayerController* GetPlayerController() const { return ShooterPlayerController; }
 	FORCEINLINE ASPlayerState* GetShooterPlayerState() const { return ShooterPlayerState; }
 	FORCEINLINE USCombatComponent* GetCombatComponent() const { return CombatComponent; }
-	FORCEINLINE USBuffComponent* GetBuffComponent() const { return BuffComponent; }
 	FORCEINLINE UStaticMeshComponent* GetAttachedGrenade() const { return AttachedGrenade; }
 	FORCEINLINE USLagCompensationComponent* GetLagCompensationComponent() const { return LagCompensationComponent; }
 	FORCEINLINE TMap<FName, UShapeComponent*>& GetRewindColliders() { return RewindCapsules; }
+	FORCEINLINE USAttributeSet* GetAttributeSet() const { return AttributeSet; };
+
 };
 

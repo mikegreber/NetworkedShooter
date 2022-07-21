@@ -27,12 +27,10 @@ void ASProjectile_Grenade::Destroyed()
 {
 	if (HasAuthority())
 	{
-		if (const ASCharacter* OwnerCharacter = GetInstigator<ASCharacter>())
+		if (ASCharacter* OwnerCharacter = GetInstigator<ASCharacter>())
 		{
-			if (ASPlayerController* OwnerController = OwnerCharacter->GetPlayerController())
-			{
-				ApplyDamage(this, GetActorLocation(), nullptr, Damage, OwnerController, this, UDamageType::StaticClass());
-			}
+			// no server side rewind for grenades, apply damage on server only
+			ApplyDamage(this, GetActorLocation(), nullptr, Damage, OwnerCharacter, this, DamageEffectClass);
 		}
 	}
 	

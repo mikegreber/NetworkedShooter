@@ -53,7 +53,9 @@ public:
 	virtual void ReceivedPlayer() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	
+
+	virtual void AcknowledgePossession(APawn* P) override;
+
 	bool HasLocalAuthority() const;
 	bool HasLowPing() const;
 
@@ -61,7 +63,7 @@ public:
 
 	// synced with server world clock
 	float GetServerTime() const;
-
+	
 	UFUNCTION() void SetHUDHealth(float Health, float MaxHealth);
 	UFUNCTION() void SetHUDShield(float Shield, float MaxShield);
 	UFUNCTION() void SetHUDKills(int32 Score);
@@ -148,6 +150,7 @@ private:
 	UPROPERTY() class ASGameState* GameState;
 	UPROPERTY() class ASGameMode* GameMode;
 	UPROPERTY() class ASPlayerState* ShooterPlayerState;
+	UPROPERTY() class USAttributeSet* AttributeSet;
 
 	UPROPERTY(ReplicatedUsing=OnRep_MatchState)
 	FName MatchState;

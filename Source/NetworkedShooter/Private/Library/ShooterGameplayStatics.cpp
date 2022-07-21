@@ -3,6 +3,10 @@
 
 #include "Library/ShooterGameplayStatics.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "Kismet/GameplayStatics.h"
+
 /** @RETURN True if weapon trace from Origin hits component VictimComp.  OutHitResult will contain properties of the hit. */
 static bool ComponentIsDamageableFrom(UPrimitiveComponent* VictimComp, FVector const& Origin, AActor const* IgnoredActor, const TArray<AActor*>& IgnoreActors, ECollisionChannel TraceChannel, FHitResult& OutHitResult)
 {
@@ -56,16 +60,103 @@ static bool ComponentIsDamageableFrom(UPrimitiveComponent* VictimComp, FVector c
 	return true;
 }
 
-bool UShooterGameplayStatics::ApplyRadialDamageWithFalloff(const UObject* WorldContextObject, float BaseDamage,float MinimumDamage, const FVector& Origin, float DamageInnerRadius, float DamageOuterRadius, float DamageFalloff, TSubclassOf<UDamageType> DamageTypeClass, const TArray<AActor*>& IgnoreActors, ECollisionChannel DamageChannel, AActor* DamageCauser, AController* InstigatedByController, ECollisionChannel DamagePreventionChannel)
+static float GetDamageScale(float DistanceFromEpicenter, float InnerRadius, float OuterRadius, float DamageFalloff)
 {
-	FCollisionQueryParams SphereParams(SCENE_QUERY_STAT(ApplyRadialDamage),  false, DamageCauser);
+	float const ValidatedInnerRadius = FMath::Max(0.f, InnerRadius);
+	float const ValidatedOuterRadius = FMath::Max(OuterRadius, ValidatedInnerRadius);
+	float const ValidatedDist = FMath::Max(0.f, DistanceFromEpicenter);
+
+	if (ValidatedDist >= ValidatedOuterRadius)
+	{
+		// outside the radius, no effect
+		return 0.f;
+	}
+
+	if ( (DamageFalloff == 0.f)	|| (ValidatedDist <= ValidatedInnerRadius) )
+	{
+		// no falloff or inside inner radius means full effect
+		return 1.f;
+	}
+
+	// calculate the interpolated scale
+	float DamageScale = 1.f - ( (ValidatedDist - ValidatedInnerRadius) / (ValidatedOuterRadius - ValidatedInnerRadius) );
+	DamageScale = FMath::Pow(DamageScale, DamageFalloff);
+
+	return DamageScale;
+}
+
+static float CalculateRadialDamage(float Damage, const FVector& Origin, TArray<struct FHitResult>& ComponentHits, float InnerRadius, float OuterRadius, float DamageFalloff, float MinimumDamage)
+{
+	float ActualDamage = Damage;
+	
+	float ClosestHitDistSq = MAX_FLT;
+	for (const FHitResult& Hit : ComponentHits)
+	{
+		float const DistSq = (Hit.ImpactPoint - Origin).SizeSquared();
+		if (DistSq < ClosestHitDistSq)
+		{
+			ClosestHitDistSq = DistSq;
+		}
+	}
+
+	float const RadialDamageScale = GetDamageScale(FMath::Sqrt(ClosestHitDistSq), InnerRadius, OuterRadius, DamageFalloff);
+
+	ActualDamage = FMath::Lerp(MinimumDamage, ActualDamage, FMath::Max(0.f, RadialDamageScale));
+
+	return ActualDamage;
+}
+
+void UShooterGameplayStatics::ApplyGameplayEffect(const IAbilitySystemInterface* Source, const IAbilitySystemInterface* Target, TSubclassOf<UGameplayEffect> EffectClass, float Level)
+{
+	if (!EffectClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s called with null EffectClass"), __FUNCTIONW__)
+		return;
+	}
+	
+	if (Source)
+	{
+		UAbilitySystemComponent* OwnerASC = Source->GetAbilitySystemComponent();
+		FGameplayEffectContextHandle ContextHandle = OwnerASC->MakeEffectContext();
+	
+		FGameplayEffectSpecHandle SpecHandle = OwnerASC->MakeOutgoingSpec(EffectClass, Level, ContextHandle);
+	
+		if (SpecHandle.Data.IsValid())
+		{
+			OwnerASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), Target->GetAbilitySystemComponent());
+		}
+	}
+	else if (Target)
+	{
+		UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
+		FGameplayEffectContextHandle ContextHandle = TargetASC->MakeEffectContext();
+	
+		FGameplayEffectSpecHandle SpecHandle = TargetASC->MakeOutgoingSpec(EffectClass, Level, ContextHandle);
+	
+		if (SpecHandle.Data.IsValid())
+		{
+			TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s Source and Target are null, effect not applied"), __FUNCTIONW__)
+	}
+	
+}
+
+bool UShooterGameplayStatics::ApplyRadialGameplayEffectWithFalloff(const UObject* WorldContextObject, TSubclassOf<UGameplayEffect> EffectClass, const FVector& Origin, float BaseLevel, float MinimumLevel, float InnerRadius, float OuterRadius, float Falloff, AActor* EffectCauser, IAbilitySystemInterface* Source, const TArray<AActor*>& IgnoreActors, ECollisionChannel DamageChannel, ECollisionChannel DamagePreventionChannel)
+{
+	FCollisionQueryParams SphereParams;
+	SphereParams.bTraceComplex = false;
+	SphereParams.AddIgnoredActor(EffectCauser);
 	SphereParams.AddIgnoredActors(IgnoreActors);
 
 	// query scene to see what we hit
 	TArray<FOverlapResult> Overlaps;
 	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
 	{
-		World->OverlapMultiByChannel(Overlaps, Origin, FQuat::Identity, DamageChannel, FCollisionShape::MakeSphere(DamageOuterRadius), SphereParams);
+		World->OverlapMultiByChannel(Overlaps, Origin, FQuat::Identity, DamageChannel, FCollisionShape::MakeSphere(OuterRadius), SphereParams);
 	}
 	
 	// collate into per-actor list of hit components
@@ -74,62 +165,31 @@ bool UShooterGameplayStatics::ApplyRadialDamageWithFalloff(const UObject* WorldC
 	{
 		AActor* const OverlapActor = Overlap.OverlapObjectHandle.FetchActor();
 
-		if (OverlapActor &&
-			OverlapActor->CanBeDamaged() &&
-			OverlapActor != DamageCauser &&
-			Overlap.Component.IsValid())
+		if (OverlapActor && Overlap.Component.IsValid())
 		{
-			FHitResult Hit;
-			if (ComponentIsDamageableFrom(Overlap.Component.Get(), Origin, DamageCauser, IgnoreActors, DamagePreventionChannel, Hit))
+			if (FHitResult Hit; ComponentIsDamageableFrom(Overlap.Component.Get(), Origin, EffectCauser, IgnoreActors, DamagePreventionChannel, Hit))
 			{
 				TArray<FHitResult>& HitList = OverlapComponentMap.FindOrAdd(OverlapActor);
 				HitList.Add(Hit);
 			}
 		}
-		
 	}
 
 	bool bAppliedDamage = false;
 
 	if (OverlapComponentMap.Num() > 0)
 	{
-		// make sure we have a good damage type
-		TSubclassOf<UDamageType> const ValidDamageTypeClass = DamageTypeClass ? DamageTypeClass : TSubclassOf<UDamageType>(UDamageType::StaticClass());
-
-		FRadialDamageEvent DmgEvent;
-		DmgEvent.DamageTypeClass = ValidDamageTypeClass;
-		DmgEvent.Origin = Origin;
-		DmgEvent.Params = FRadialDamageParams(BaseDamage, MinimumDamage, DamageInnerRadius, DamageOuterRadius, DamageFalloff);
-
 		// call damage function on each affected actors
-		for (TMap<AActor*, TArray<FHitResult> >::TIterator It(OverlapComponentMap); It; ++It)
+		for (auto& [HitActor, HitComponents] : OverlapComponentMap)
 		{
-			AActor* const Victim = It.Key();
-			TArray<FHitResult> const& ComponentHits = It.Value();
-			DmgEvent.ComponentHits = ComponentHits;
-
-			Victim->TakeDamage(BaseDamage, DmgEvent, InstigatedByController, DamageCauser);
-
+			float Damage = CalculateRadialDamage(BaseLevel, Origin, HitComponents, InnerRadius, OuterRadius, Falloff, MinimumLevel);
+			ApplyGameplayEffect(Source, Cast<IAbilitySystemInterface>(HitActor), EffectClass, Damage);
+			
 			bAppliedDamage = true;
 		}
 	}
 
 	return bAppliedDamage;
-}
-
-
-float UShooterGameplayStatics::ApplyDamage(AActor* DamagedActor, float BaseDamage, AController* EventInstigator, AActor* DamageCauser, TSubclassOf<UDamageType> DamageTypeClass)
-{
-	if ( DamagedActor && (BaseDamage != 0.f) )
-	{
-		// make sure we have a good damage type
-		TSubclassOf<UDamageType> const ValidDamageTypeClass = DamageTypeClass ? DamageTypeClass : TSubclassOf<UDamageType>(UDamageType::StaticClass());
-		FDamageEvent DamageEvent(ValidDamageTypeClass);
-
-		return DamagedActor->TakeDamage(BaseDamage, DamageEvent, EventInstigator, DamageCauser);
-	}
-
-	return 0.f;
 }
 
 // note: this will automatically fall back to line test if radius is small enough
@@ -242,4 +302,16 @@ bool UShooterGameplayStatics::PredictProjectilePath(const UObject* WorldContextO
 	}
 
 	return bBlockingHit;
+}
+
+void UShooterGameplayStatics::PlayMontage(UAnimInstance* Instance, UAnimMontage* Montage, FName SectionName)
+{
+	if (Instance && Montage)
+	{
+		Instance->Montage_Play(Montage);
+		if (SectionName != NAME_None)
+		{
+			Instance->Montage_JumpToSection(SectionName, Montage);
+		}
+	}
 }

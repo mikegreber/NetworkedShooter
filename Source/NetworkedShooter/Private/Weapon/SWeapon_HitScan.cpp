@@ -2,12 +2,14 @@
 
 
 #include "Weapon/SWeapon_HitScan.h"
+#include "AbilitySystem/SAbilitySystemComponent.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "Character/SCharacter.h"
 #include "Components/SLagCompensationComponent.h"
 #include "GameFramework/GameStateBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Library/ShooterGameplayStatics.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "Particles/ParticleSystemComponent.h"
 #include "PlayerController/SPlayerController.h"
@@ -31,35 +33,14 @@ void ASWeapon_HitScan::LocalFire(const FTransform& MuzzleTransform, const FVecto
 			if ((IsServerControlled() && IsLocallyControlled()) || bIsRewindFire || !CanUseServerSideRewind())
 			{
 				const FName BoneName = bIsRewindFire ? FireHit.GetComponent()->GetFName() : FireHit.BoneName;
-				
-				// fired from server host, from rewind, or if rewind is disabled - apply damage on server
-				ApplyDamage(HitCharacter, BoneName);
+				UShooterGameplayStatics::ApplyGameplayEffect(OwnerCharacter, HitCharacter, DamageEffectClass, BoneName == "Head" ? HeadshotDamage : Damage);
 			}
 		}
 		else if (IsLocallyControlled() && CanUseServerSideRewind()) // local client - use server-side rewind
 		{
+			UE_LOG(LogTemp, Warning, TEXT("Server Rewind"))
 			ServerRewind(HitCharacter, TraceStart, HitTarget);
 		}
-
-		
-		// if (CanUseServerSideRewind())
-		// {
-		// 	if (IsLocallyControlled() || bIsRewindFire) 
-		// 	{
-		// 		if (HasAuthority()) // shot from local server or server-rewind
-		// 		{
-		// 			ApplyDamage(HitCharacter);
-		// 		}
-		// 		else // shot from local client
-		// 		{
-		// 			ServerRewind(HitCharacter, TraceStart, HitTarget);
-		// 		}
-		// 	}
-		// }
-		// else if (HasAuthority()) // no rewind shot from server
-		// {
-		// 	ApplyDamage(HitCharacter);
-		// }
 	}
 
 	if (!bIsRewindFire)
@@ -172,13 +153,18 @@ void ASWeapon_HitScan::WeaponTraceHit(const FVector& TraceStart, const FVector& 
 
 void ASWeapon_HitScan::ApplyDamage(ASCharacter* HitCharacter, FName BoneName)
 {
-	UGameplayStatics::ApplyDamage(
-		HitCharacter,
-		BoneName == "Head" ? HeadshotDamage : Damage,
-		OwnerController,
-		this,
-		UDamageType::StaticClass()
-	);
+	if (HitCharacter)
+	{
+		UAbilitySystemComponent* OwnerASC = OwnerCharacter->GetAbilitySystemComponent();
+		FGameplayEffectContextHandle ContextHandle = OwnerASC->MakeEffectContext();
+		
+		FGameplayEffectSpecHandle SpecHandle = OwnerASC->MakeOutgoingSpec(DamageEffectClass, BoneName == "Head" ? HeadshotDamage : Damage, ContextHandle);
+
+		if (SpecHandle.Data.IsValid())
+		{
+			OwnerASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), HitCharacter->GetAbilitySystemComponent());
+		}
+	}
 }
 
 void ASWeapon_HitScan::ServerRewind(ASCharacter* HitCharacter, const FVector& TraceStart, const FVector_NetQuantize& HitTarget)

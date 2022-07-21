@@ -3,6 +3,8 @@
 
 #include "PlayerController/SPlayerController.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystem/SAttributeSet.h"
 #include "Character/SCharacter.h"
 #include "Character/SCharacter_Lobby.h"
 #include "Components/Image.h"
@@ -69,6 +71,16 @@ void ASPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorldTimerManager().ClearAllTimersForObject(this);
 	
 	Super::EndPlay(EndPlayReason);
+}
+
+void ASPlayerController::AcknowledgePossession(APawn* P)
+{
+	Super::AcknowledgePossession(P);
+
+	if (ASCharacter* PossessedCharacter = Cast<ASCharacter>(P))
+	{
+		PossessedCharacter->GetAbilitySystemComponent()->InitAbilityActorInfo(PossessedCharacter, PossessedCharacter);
+	}
 }
 
 void ASPlayerController::InitHUD()
@@ -179,10 +191,6 @@ void ASPlayerController::SetPlayerState(APlayerState* NewPlayerState)
 	OnPlayerStateSet.Broadcast(ShooterPlayerState);
 	
 	if (ShooterPlayerState && IsLocalPlayerController()) PlayerStateHUDInit();
-	if (ASCharacter_Lobby* LobbyCharacter = ShooterPlayerState->GetPawn<ASCharacter_Lobby>())
-	{
-		LobbyCharacter->SetTopOverheadText(ShooterPlayerState->GetPlayerName());
-	}
 }
 
 void ASPlayerController::OnPossess(APawn* NewPawn)
@@ -233,13 +241,22 @@ void ASPlayerController::PlayerCharacterHUDInit()
 {
 	if (ASCharacter* SCharacter = Cast<ASCharacter>(GetPawn()))
 	{
-		if (HUD && HUD->CharacterOverlay)
+		if (HUD && HUD->CharacterOverlay && !AttributeSet)
 		{
-			SCharacter->OnHealthChanged.AddUniqueDynamic(this, &ASPlayerController::SetHUDHealth);
-			SCharacter->OnHealthChanged.Broadcast(SCharacter->GetHealth(), SCharacter->GetMaxHealth());
+			UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR);
+			AttributeSet = SCharacter->GetAttributeSet();
 
-			SCharacter->OnShieldChanged.AddUniqueDynamic(this, &ASPlayerController::SetHUDShield);
-			SCharacter->OnShieldChanged.Broadcast(SCharacter->GetShield(), SCharacter->GetMaxShield());
+			AttributeSet->OnHealthChanged.AddUniqueDynamic(this, &ASPlayerController::SetHUDHealth);
+			AttributeSet->OnHealthChanged.Broadcast(AttributeSet->GetHealth(),AttributeSet->GetMaxHealth());
+			
+			AttributeSet->OnMaxHealthChanged.AddUniqueDynamic(this, &ASPlayerController::SetHUDHealth);
+			AttributeSet->OnMaxHealthChanged.Broadcast(AttributeSet->GetHealth(),AttributeSet->GetMaxHealth());
+
+			AttributeSet->OnShieldChanged.AddUniqueDynamic(this, &ASPlayerController::SetHUDShield);
+			AttributeSet->OnShieldChanged.Broadcast(AttributeSet->GetShield(),AttributeSet->GetShield());
+
+			AttributeSet->OnMaxShieldChanged.AddUniqueDynamic(this, &ASPlayerController::SetHUDShield);
+			AttributeSet->OnMaxShieldChanged.Broadcast(AttributeSet->GetShield(),AttributeSet->GetMaxShield());
 
 			SCharacter->GetCombatComponent()->OnCarriedAmmoUpdated.AddUniqueDynamic(this, &ASPlayerController::SetHUDCarriedAmmo);
 			SCharacter->GetCombatComponent()->OnCarriedAmmoUpdated.Broadcast(SCharacter->GetCombatComponent()->GetCarriedAmmo());
@@ -266,9 +283,18 @@ void ASPlayerController::OnUnPossess()
 {
 	if (IsLocalController())
 	{
-		if (ASCharacter* SCharacter = Cast<ASCharacter>(GetPawn()))
+		if (const ASCharacter* SCharacter = Cast<ASCharacter>(GetPawn()))
 		{
-			SCharacter->OnHealthChanged.RemoveDynamic(this, &ASPlayerController::SetHUDHealth);
+			if (IsValid(AttributeSet))
+			{
+				AttributeSet->OnHealthChanged.RemoveDynamic(this, &ASPlayerController::SetHUDHealth);
+				AttributeSet->OnMaxHealthChanged.RemoveDynamic(this, &ASPlayerController::SetHUDHealth);
+				AttributeSet->OnShieldChanged.RemoveDynamic(this, &ASPlayerController::SetHUDShield);
+				AttributeSet = nullptr;
+			}
+			
+			
+			// SCharacter->OnHealthChanged.RemoveDynamic(this, &ASPlayerController::SetHUDHealth);
 			SCharacter->GetCombatComponent()->OnCarriedAmmoUpdated.RemoveDynamic(this, &ASPlayerController::SetHUDCarriedAmmo);
 			SCharacter->GetCombatComponent()->OnGrenadesUpdated.RemoveDynamic(this, &ASPlayerController::SetHUDGrenades);
 		}
@@ -323,6 +349,8 @@ void ASPlayerController::OnMatchStateSet(FName State, bool bTeamsMatch)
 		HandleCooldown();
 	}
 }
+
+
 
 void ASPlayerController::OnRep_MatchState()
 {
@@ -505,6 +533,8 @@ void ASPlayerController::SetHUDHealth(float Health, float MaxHealth)
 {
 	if (IsLocalController())
 	{
+		Health = AttributeSet->GetHealth();
+		MaxHealth = AttributeSet->GetMaxHealth();
 		HUD->CharacterOverlay->HealthBar->SetPercent(Health/MaxHealth);
 		const FText HealthText = FText::FromString(FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Health), FMath::CeilToInt(MaxHealth)));
 		HUD->CharacterOverlay->HealthText->SetText(HealthText);
@@ -519,6 +549,8 @@ void ASPlayerController::SetHUDShield(float Shield, float MaxShield)
 {
 	if (IsLocalController())
 	{
+		Shield = AttributeSet->GetShield();
+		MaxShield = AttributeSet->GetMaxShield();
 		HUD->CharacterOverlay->ShieldBar->SetPercent(Shield/MaxShield);
 		const FText ShieldText = FText::FromString(FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Shield), FMath::CeilToInt(MaxShield)));
 		HUD->CharacterOverlay->ShieldText->SetText(ShieldText);

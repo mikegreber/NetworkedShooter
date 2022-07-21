@@ -5,10 +5,11 @@
 
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
-#include "Animation/AnimInstance.h"
+#include "AbilitySystem/SAbilitySystemComponent.h"
+#include "AbilitySystem/SAttributeSet.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
-#include "Components/SBuffComponent.h"
+#include "Components/SCharacterMovementComponent.h"
 #include "Components/SCombatComponent.h"
 #include "Components/SLagCompensationComponent.h"
 #include "Components/WidgetComponent.h"
@@ -19,6 +20,7 @@
 #include "HUD/SOverheadWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Library/ShooterGameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "NetworkedShooter/NetworkedShooter.h"
@@ -35,9 +37,15 @@
 	name->SetCollisionProfileName("RewindCollider"); \
 	map.Emplace(FName(#name), name);
 
-ASCharacter::ASCharacter()
+ASCharacter::ASCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<USCharacterMovementComponent>(CharacterMovementComponentName))
 {
 	PrimaryActorTick.bCanEverTick = true;
+
+	ASC = CreateDefaultSubobject<USAbilitySystemComponent>("AbilitySystemComponent");
+	ASC->SetIsReplicated(true);
+	ASC->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+	AttributeSet = CreateDefaultSubobject<USAttributeSet>("AttributeSet");
 
 	SpawnCollisionHandlingMethod = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	
@@ -59,9 +67,6 @@ ASCharacter::ASCharacter()
 	CombatComponent = CreateDefaultSubobject<USCombatComponent>("CombatComponent");
 	CombatComponent->SetIsReplicated(true);
 	CombatComponent->SetComponentTickEnabled(false);
-	
-	BuffComponent = CreateDefaultSubobject<USBuffComponent>("BuffComponent");
-	BuffComponent->SetIsReplicated(true);
 
 	LagCompensationComponent = CreateDefaultSubobject<USLagCompensationComponent>("LagCompensationComponent");
 
@@ -103,7 +108,18 @@ ASCharacter::ASCharacter()
 	SetupHitCapsule(RewindCapsules, calf_r, GetMesh());
 	SetupHitCapsule(RewindCapsules, foot_l, GetMesh());
 	SetupHitCapsule(RewindCapsules, foot_r, GetMesh())
-}	
+
+	TeamMaterials = TMap<ETeam, FTeamMaterial>({
+		{ETeam::ET_NoTeam, FTeamMaterial()},
+		{ETeam::ET_BlueTeam, FTeamMaterial()},
+		{ETeam::ET_RedTeam, FTeamMaterial()},
+	});
+}
+
+UAbilitySystemComponent* ASCharacter::GetAbilitySystemComponent() const
+{
+	return ASC;
+}
 
 void ASCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -111,8 +127,6 @@ void ASCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 
 	DOREPLIFETIME_CONDITION(ASCharacter, OverlappingWeapon, COND_OwnerOnly);
 	DOREPLIFETIME(ASCharacter, bDisableGameplay);
-	DOREPLIFETIME(ASCharacter, Health);
-	DOREPLIFETIME(ASCharacter, Shield);
 	DOREPLIFETIME(ASCharacter, bIsServerControlled);
 }
 
@@ -122,44 +136,33 @@ void ASCharacter::PostInitializeComponents()
 	
 	if (CombatComponent) CombatComponent->SetOwnerCharacter(this);
 	
-	if (BuffComponent) BuffComponent->SetOwnerCharacter(this);
-
 	if (LagCompensationComponent) LagCompensationComponent->SetOwnerCharacter(this);
 	
 	if (AttachedGrenade) AttachedGrenade->SetVisibility(false);
+
+	Cast<USCharacterMovementComponent>(GetCharacterMovement())->SetAttributeSet(AttributeSet);
+
+	AttributeSet->SetOwner(this);
+
+	AttributeSet->OnHealthChanged.AddDynamic(this, &ASCharacter::OnHealthChanged);
+	AttributeSet->OnShieldChanged.AddDynamic(this, &ASCharacter::OnHealthChanged);
 	
-	if (HasAuthority()) OnTakeAnyDamage.AddDynamic(this, &ASCharacter::ReceiveDamage);
+	if (HasAuthority())
+	{
+		AttributeSet->OnKilled.AddDynamic(this, &ASCharacter::OnKilled);
+	}
 }
-
-
 
 void ASCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	AnimInstance = GetMesh()->GetAnimInstance();
 	ShooterGameMode = GetWorld()->GetAuthGameMode<ASGameMode>();
-
 	SetShooterPlayerState(GetPlayerState());
 	SetGameState(GetWorld()->GetGameState());
 	
-	if (HasAuthority()) SpawnDefaultWeapon();
-}
-
-void ASCharacter::SpawnDefaultWeapon() const
-{
-	// only call on server when using ASGameMode
-	if (Cast<ASGameMode>(UGameplayStatics::GetGameMode(this)))
-	{
-		if (DefaultWeaponClass && CombatComponent && !bEliminated)
-		{
-			if (UWorld* World = GetWorld())
-			{
-				ASWeapon* Weapon = World->SpawnActor<ASWeapon>(DefaultWeaponClass);
-				Weapon->bDestroyWeaponOnKilled = true;
-				CombatComponent->EquipWeapon(Weapon);
-			}
-		}
-	}
+	InitializeAbilities();
 }
 
 void ASCharacter::MulticastGainedTheLead_Implementation()
@@ -198,21 +201,22 @@ void ASCharacter::MulticastLostTheLead_Implementation()
 // called on server only
 void ASCharacter::PossessedBy(AController* NewController)
 {
-	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, *GetNameSafe(this))
 	ASPlayerController* OldController = ShooterPlayerController;
 	Super::PossessedBy(NewController);
 	SetPlayerController(NewController, OldController);
 	SetShooterPlayerState(GetPlayerState());
+	ASC->InitAbilityActorInfo(this, this);
+	SetOwner(NewController);
 }
 
 // called on clients only
 void ASCharacter::OnRep_Controller()
 {
-	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, *GetNameSafe(this))
 	ASPlayerController* OldController = ShooterPlayerController;
 	Super::OnRep_Controller();
 	SetPlayerController(Controller, OldController);
 	SetShooterPlayerState(GetPlayerState());
+	SetOwner(Controller);
 }
 
 void ASCharacter::SetPlayerController(AController* NewController, AController* OldController)
@@ -235,6 +239,7 @@ void ASCharacter::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
 	SetShooterPlayerState(GetPlayerState());
+	ASC->InitAbilityActorInfo(this, this);
 }
 
 void ASCharacter::CheckInLead()
@@ -250,29 +255,11 @@ void ASCharacter::CheckInLead()
 
 void ASCharacter::SetTeamColor(ETeam NewTeam)
 {
-	if (!GetMesh()) return;
-	
-	switch (NewTeam)
+	if (TeamMaterials.Contains(NewTeam))
 	{
-	case ETeam::ET_NoTeam:
-		{
-			GetMesh()->SetMaterial(0, OriginalMaterialInstance);
-			DissolveMaterialInstance = BlueDissolveMaterialInstance;
-			break;
-		}
-	case ETeam::ET_RedTeam:
-		{
-			GetMesh()->SetMaterial(0, RedMaterialInstance);
-			DissolveMaterialInstance = RedDissolveMaterialInstance;
-			break;
-		}
-	case ETeam::ET_BlueTeam:
-		{
-			GetMesh()->SetMaterial(0, BlueMaterialInstance);
-			DissolveMaterialInstance = BlueDissolveMaterialInstance;
-			break;
-		}
-	default: ;
+		const FTeamMaterial& TeamMaterial = TeamMaterials[NewTeam];
+		GetMesh()->SetMaterial(0, TeamMaterial.MaterialInstance);
+		DissolveMaterialInstance = TeamMaterial.DissolveMaterialInstance;
 	}
 }
 
@@ -360,7 +347,7 @@ void ASCharacter::MulticastEliminated_Implementation(bool bPlayerLeftGame)
 	bLeftGame = bPlayerLeftGame;
 	bEliminated = true;
 	
-	PlayEliminatedMontage();
+	UShooterGameplayStatics::PlayMontage(AnimInstance, ElimMontage);
 
 	// start dissolve effect
 	if (DissolveMaterialInstance)
@@ -463,37 +450,6 @@ void ASCharacter::Destroyed()
 	}
 }
 
-void ASCharacter::PlayEliminatedMontage()
-{
-	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance(); AnimInstance && ElimMontage)
-	{
-		AnimInstance->Montage_Play(ElimMontage);
-	}
-}
-
-void ASCharacter::PlayThrowGrenadeMontage()
-{
-	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance(); AnimInstance && ThrowGrenadeMontage)
-	{
-		AnimInstance->Montage_Play(ThrowGrenadeMontage);
-	}
-}
-
-void ASCharacter::PlayHitReactMontage()
-{
-	if (CombatComponent && CombatComponent->EquippedWeapon)
-	{
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-		if (AnimInstance && HitReactMontage)
-		{
-			AnimInstance->Montage_Play(HitReactMontage);
-			AnimInstance->Montage_JumpToSection("FromFront");
-		}
-	}
-}
-
-
-
 void ASCharacter::Jump()
 {
 	SERVER_ONLY();
@@ -507,6 +463,19 @@ void ASCharacter::Jump()
 	else
 	{
 		Super::Jump();
+	}
+}
+
+void ASCharacter::InitializeAbilities()
+{
+	for (const TSubclassOf<UGameplayAbility> Ability : StartingAbilities)
+	{
+		ASC->GiveAbility(Ability);
+	}
+	
+	for (const TSubclassOf<UGameplayEffect> GameplayEffect : StartingEffects)
+	{
+		UShooterGameplayStatics::ApplyGameplayEffect(nullptr, this, GameplayEffect, 1);
 	}
 }
 
@@ -746,19 +715,11 @@ void ASCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamag
 	if (!ShooterGameMode || bEliminated) return;
 
 	Damage = ShooterGameMode->CalculateDamage(InstigatorController, Controller, Damage);
-	
-	const float LastShield = Shield;
-	Shield = ClampWithOverflow(Shield - Damage, 0.f, MaxShield, Damage);
-	OnRep_Shield(LastShield);
-	
-	const float LastHealth = Health;
-	Health = FMath::Clamp(Health - Damage, 0.f, MaxHealth);
-	OnRep_Health(LastHealth);
+}
 
-	if (Health == 0.f)
-	{
-		OnKilled(InstigatorController);
-	}
+void ASCharacter::OnHealthChanged(float NewValue, float OldValue)
+{
+	if (NewValue < OldValue) UShooterGameplayStatics::PlayMontage(AnimInstance, HitReactMontage);
 }
 
 void ASCharacter::TurnInPlace(float DeltaSeconds)
@@ -806,31 +767,7 @@ void ASCharacter::HideCharacterIfCameraClose() const
 	}
 }
 
-void ASCharacter::OnRep_Health(float LastHealth)
-{
-	if (IsLocallyControlled())
-	{
-		OnHealthChanged.Broadcast(Health, MaxHealth);
-	}
 
-	if (Health < LastHealth)
-	{
-		PlayHitReactMontage();
-	}
-}
-
-void ASCharacter::OnRep_Shield(float LastShield)
-{
-	if (IsLocallyControlled())
-	{
-		OnShieldChanged.Broadcast(Shield, MaxShield);
-	}
-
-	if (Shield < LastShield)
-	{
-		PlayHitReactMontage();
-	}
-}
 
 void ASCharacter::UpdateDissolveMaterial(float DissolveValue)
 {
@@ -914,20 +851,6 @@ FVector ASCharacter::GetHitTarget() const
 		return CombatComponent->HitTarget;
 	}
 	return FVector();
-}
-
-void ASCharacter::SetHealth(float Amount)
-{
-	const float LastHealth = Health;
-	Health = Amount;
-	OnRep_Health(LastHealth);
-}
-
-void ASCharacter::SetShield(float Amount)
-{
-	const float LastShield = Shield;
-	Shield = Amount;
-	OnRep_Shield(LastShield);
 }
 
 ESCombatState ASCharacter::GetCombatState() const

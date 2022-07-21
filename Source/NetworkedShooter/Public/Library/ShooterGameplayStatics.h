@@ -16,56 +16,16 @@ class NETWORKEDSHOOTER_API UShooterGameplayStatics : public UBlueprintFunctionLi
 	GENERATED_BODY()
 	
 public:
-	/** Hurt locally authoritative actors within the radius. Will only hit components that block the Visibility channel.
- * @param BaseDamage - The base damage to apply, i.e. the damage at the origin.
- * @param Origin - Epicenter of the damage area.
- * @param DamageInnerRadius - Radius of the full damage area, from Origin
- * @param DamageOuterRadius - Radius of the minimum damage area, from Origin
- * @param DamageFalloff - Falloff exponent of damage from DamageInnerRadius to DamageOuterRadius
- * @param DamageTypeClass - Class that describes the damage that was done.
- * @param IgnoreActors - List of Actors to ignore
- * @param DamageChannel - Damage will only be applied to victim trace is blocked on this channel
- * @param DamageCauser - Actor that actually caused the damage (e.g. the grenade that exploded)
- * @param InstigatedByController - Controller that was responsible for causing this damage (e.g. player who threw the grenade)
- * @param DamagePreventionChannel - Damage will not be applied to victim if there is something between the origin and the victim which blocks traces on this channel
- * @return true if damage was applied to at least one actor.
- */
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Game|Damage", meta=(WorldContext="WorldContextObject", AutoCreateRefTerm="IgnoreActors"))
-	static bool ApplyRadialDamageWithFalloff(const UObject* WorldContextObject, float BaseDamage, float MinimumDamage, const FVector& Origin, float DamageInnerRadius, float DamageOuterRadius, float DamageFalloff, TSubclassOf<class UDamageType> DamageTypeClass, const TArray<AActor*>& IgnoreActors, ECollisionChannel DamageChannel = ECC_Visibility, AActor* DamageCauser = NULL, AController* InstigatedByController = NULL, ECollisionChannel DamagePreventionChannel = ECC_Visibility);
 
-	static float ApplyDamage(AActor* DamagedActor, float BaseDamage, AController* EventInstigator, AActor* DamageCauser, TSubclassOf<UDamageType> DamageTypeClass);
+	static void ApplyGameplayEffect(const class IAbilitySystemInterface* Source, const IAbilitySystemInterface* Target, TSubclassOf<class UGameplayEffect> EffectClass, float Level);
+
+	static bool ApplyRadialGameplayEffectWithFalloff(const UObject* WorldContextObject, TSubclassOf<UGameplayEffect> EffectClass, const FVector& Origin, float BaseLevel, float MinimumLevel, float InnerRadius, float OuterRadius, float Falloff, AActor* EffectCauser = nullptr, IAbilitySystemInterface* Source = nullptr, const TArray<AActor*>& IgnoreActors = TArray<AActor*>(), ECollisionChannel DamageChannel = ECC_Visibility, ECollisionChannel DamagePreventionChannel = ECC_Visibility);
 
 	// same as UGameplayStatics, but always uses GravityOverrideZ
 	static bool PredictProjectilePath(const UObject* WorldContextObject, const FPredictProjectilePathParams& PredictParams, FPredictProjectilePathResult& PredictResult);
 
-	// returns string with all characters removed up to the last '/' character, if there is one, otherwise returns the original string
-	static FString ParseAssetName(const FString& Path)
-	{
-		FString Name = Path;
+	static void PlayMontage(UAnimInstance* Instance, UAnimMontage* Montage, FName SectionName = NAME_None);
 
-		int32 Index;
-		if (Name.FindLastChar('/', Index) && Name.Len() > Index + 1)
-		{
-			Name.RemoveAt(0, Index);
-		}
-
-		return Name;
-	}
-
-	// returns string with all characters removed up to the last '/' character, if there is one, otherwise returns the original string
-	static FString ParseAssetName(const FPrimaryAssetId& AssetId)
-	{
-		FString Name = AssetId.ToString();
-
-		int32 Index;
-		if (Name.FindLastChar('/', Index) && Name.Len() > Index + 1)
-		{
-			Name.RemoveAt(0, Index + 1);
-		}
-
-		return Name;
-	}
-	
 	template<class T>
 	static void GetActorsInRadius(const UObject* WorldContextObject, const FVector& Origin, float Radius, TArray<T*>& OutActors, const TArray<AActor*>& IgnoreActors = TArray<AActor*>());
 };

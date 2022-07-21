@@ -21,6 +21,9 @@ class NETWORKEDSHOOTER_API USCombatComponent : public UActorComponent
 	GENERATED_BODY()
 
 	friend class ASCharacter;
+
+	UPROPERTY(EditAnywhere, Category = "Combat | Defaults")
+	TSubclassOf<ASWeapon> DefaultWeaponClass;
 	
 	UPROPERTY(EditAnywhere, Category = "Combat | Ammo")
 	int32 MaxCarriedAmmoAmount = 500;
@@ -51,6 +54,9 @@ class NETWORKEDSHOOTER_API USCombatComponent : public UActorComponent
 
 	UPROPERTY(EditAnywhere, Category = "Combat | Animation")
 	UAnimMontage* ReloadMontage;
+
+	UPROPERTY(EditAnywhere, Category = "Combat | Animation")
+	UAnimMontage* ThrowGrenadeMontage;
 
 public:
 	
@@ -94,8 +100,9 @@ private:
 	bool bFireButtonPressed;
 	FVector_NetQuantize HitTarget;
 
-	UPROPERTY() ASCharacter* OwnerCharacter;
-	UPROPERTY() class ASPlayerController* PlayerController;
+	UPROPERTY() ASCharacter* Character;
+	UPROPERTY() UAnimInstance* AnimInstance;
+	UPROPERTY() class ASPlayerController* Controller;
 	UPROPERTY() class ASHUD* HUD;
 
 	FHUDPackage HUDPackage;
@@ -113,6 +120,8 @@ public:
 	USCombatComponent();
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	virtual void BeginPlay() override;
 	
 	void SetOwnerCharacter(ASCharacter* NewCharacter);
 
@@ -129,12 +138,15 @@ public:
 	void ReloadWeapon();
 	
 	void PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount);
-
+	
 	void PlayFireMontage() const;
 	
 	void PlayReloadMontage() const;
 
+	
 protected:
+	
+	void SpawnDefaultWeapon();
 	
 	void TraceUnderCrosshairs(FHitResult& TraceHitResult);
 
@@ -173,6 +185,8 @@ protected:
 	void ServerSetAiming(bool bIsAiming);
 	UFUNCTION()
 	void OnRep_Aiming();
+
+	void PlayThrowGrenadeMontage() const;
 
 	void ThrowGrenade();
 	UFUNCTION(Server, Reliable)

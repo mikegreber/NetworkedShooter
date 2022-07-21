@@ -3,6 +3,8 @@
 
 #include "Weapon/SWeapon.h"
 
+#include "AbilitySystemComponent.h"
+#include "GameplayEffectTypes.h"
 #include "Character/SCharacter.h"
 #include "Components/SCombatComponent.h"
 #include "Components/SphereComponent.h"
@@ -179,8 +181,6 @@ void ASWeapon::Fire(FVector_NetQuantize HitTarget)
 	if (CanFire())
 	{
 		bCanFire = false;
-
-		OwnerComponent->PlayFireMontage();
 	
 		if (bUseScatter) HitTarget = TraceEndWithScatter(HitTarget);
 
@@ -199,6 +199,8 @@ void ASWeapon::LocalFire(const FTransform& MuzzleTransform, const FVector_NetQua
 {
 	if (!bIsRewindFire)
 	{
+		OwnerComponent->PlayFireMontage();
+		
 		if (FireAnimation)
 		{
 			WeaponMesh->PlayAnimation(FireAnimation, false);

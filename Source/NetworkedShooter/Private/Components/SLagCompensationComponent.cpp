@@ -115,14 +115,15 @@ void USLagCompensationComponent::RewindProjectileHit(ASWeapon_Projectile* Damage
 	if (UShooterGameplayStatics::PredictProjectilePath(this, PathParams, PathResult))
 	{
 		float Damage = PathResult.HitResult.GetComponent()->GetFName() == "Head" ? DamageCauser->GetHeadshotDamage() : DamageCauser->GetDamage();
+		// UShooterGameplayStatics::ApplyDamageEffect(GetOwner<IAbilitySystemInterface>(),Cast<IAbilitySystemInterface>(PathResult.HitResult.GetActor()), DamageCauser->DamageEffectClass, Damage);
 		ProjectileCDO->ApplyDamage(
 			this,
 			PathResult.HitResult.Location,
 			PathResult.HitResult.GetActor(),
 			Damage,
-			DamageCauser->OwnerController,
+			DamageCauser->OwnerCharacter,
 			DamageCauser,
-			UDamageType::StaticClass(),
+			DamageCauser->DamageEffectClass,
 			ECC_RewindTrace
 		);
 	}

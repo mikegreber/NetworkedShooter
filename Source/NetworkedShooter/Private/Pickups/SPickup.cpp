@@ -3,6 +3,8 @@
 
 #include "Pickups/SPickup.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Components/SphereComponent.h"
@@ -38,7 +40,7 @@ ASPickup::ASPickup()
 void ASPickup::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
 	if (HasAuthority())
 	{
 		GetWorldTimerManager().SetTimer(
@@ -59,12 +61,41 @@ void ASPickup::BindOverlapTimerFinished()
 	OverlapSphere->GetOverlappingActors(OverlappingActors);
 	for (AActor* Actor : OverlappingActors)
 	{
+		
 		OverlapSphere->OnComponentBeginOverlap.Broadcast(nullptr, Actor, nullptr, 0, false, FHitResult());
 	}
 }
 
 void ASPickup::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	if (const IAbilitySystemInterface* Interface = Cast<IAbilitySystemInterface>(OtherActor))
+	{
+		UAbilitySystemComponent* ASC = Interface->GetAbilitySystemComponent();
+		for (const TSubclassOf<UGameplayAbility> Ability : PickupAbilities)
+		{
+			ASC->GiveAbility(Ability);
+		}
+
+		for (const auto& [GameplayEffect, Level] : PickupEffects)
+		{
+			FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(GameplayEffect, Level, ASC->MakeEffectContext());
+			if (FGameplayEffectSpec* Spec = SpecHandle.Data.Get())
+			{
+				static FGameplayTag DataTag_Overtime = FGameplayTag::RequestGameplayTag(FName("DataTag.OverTime"));
+				
+				FGameplayTagContainer TagContainer;
+				Spec->GetAllAssetTags(TagContainer);
+				
+				if (TagContainer.HasTag(DataTag_Overtime))
+				{
+					Spec->Period = 0.05f;
+					Spec->SetSetByCallerMagnitude(DataTag_Overtime, Level * (Spec->GetPeriod() / Spec->GetDuration()));
+				}
+			}
+			ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		}
+		Destroy();
+	}
 }
 
 void ASPickup::SetCustomDepthColor(ECustomDepthColor Color) const

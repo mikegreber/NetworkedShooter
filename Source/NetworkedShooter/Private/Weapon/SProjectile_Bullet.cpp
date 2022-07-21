@@ -3,6 +3,8 @@
 
 #include "Weapon/SProjectile_Bullet.h"
 
+#include "AbilitySystemComponent.h"
+#include "GameplayEffectTypes.h"
 #include "Character/SCharacter.h"
 #include "Components/SLagCompensationComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -21,9 +23,9 @@ ASProjectile_Bullet::ASProjectile_Bullet()
 	ProjectileMovementComponent->SetIsReplicated(true);
 }
 
-void ASProjectile_Bullet::ApplyDamage(const UObject* WorldContextObject, const FVector& Location, AActor* DamagedActor, float BaseDamage, AController* EventInstigator, AActor* DamageCauser, TSubclassOf<UDamageType> DamageTypeClass, ECollisionChannel DamageChannel) const
+void ASProjectile_Bullet::ApplyDamage(const UObject* WorldContextObject, const FVector& Location, AActor* DamagedActor, float BaseDamage, IAbilitySystemInterface* Source, AActor* DamageCauser, TSubclassOf<UGameplayEffect> DamageEffect, ECollisionChannel DamageChannel) const
 {
-	UShooterGameplayStatics::ApplyDamage(DamagedActor, BaseDamage, EventInstigator, DamageCauser, UDamageType::StaticClass());
+	UShooterGameplayStatics::ApplyGameplayEffect(Source, Cast<IAbilitySystemInterface>(DamagedActor), DamageEffect, BaseDamage);
 }
 
 void ASProjectile_Bullet::BeginPlay()
@@ -39,24 +41,13 @@ void ASProjectile_Bullet::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor
 		{
 			if (ASPlayerController* OwnerController = OwnerCharacter->GetPlayerController())
 			{
-				
-
 				if (bUseServerSideRewind)
 				{
 					if (OwnerCharacter->IsLocallyControlled())
 					{
 						if (OwnerCharacter->HasAuthority()) // shot from local server
 						{
-							const FName BoneName =  Hit.BoneName;
-							ApplyDamage(
-								this,
-								GetActorLocation(),
-								HitCharacter,
-								Hit.BoneName == "Head" ? HeadshotDamage : Damage,
-								OwnerController,
-								this,
-								UDamageType::StaticClass()
-							);
+							UShooterGameplayStatics::ApplyGameplayEffect(OwnerCharacter, HitCharacter, DamageEffectClass, Hit.BoneName == "Head" ? HeadshotDamage : Damage);
 						}
 						else  // shot from local client
 						{
@@ -72,15 +63,7 @@ void ASProjectile_Bullet::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor
 				}
 				else if (OwnerCharacter->HasAuthority()) // no rewind shot from server
 				{
-					ApplyDamage(
-						this,
-						 GetActorLocation(),
-						 HitCharacter,
-						 Hit.BoneName == "Head" ? HeadshotDamage : Damage,
-						 OwnerController,
-						 this,
-						 UDamageType::StaticClass()
-					);
+					UShooterGameplayStatics::ApplyGameplayEffect(OwnerCharacter, HitCharacter, DamageEffectClass, Hit.BoneName == "Head" ? HeadshotDamage : Damage);
 				}
 			}
 		}

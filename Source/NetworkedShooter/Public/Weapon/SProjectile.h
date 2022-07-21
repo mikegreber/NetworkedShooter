@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilitySystemInterface.h"
 #include "GameFramework/Actor.h"
 #include "SProjectile.generated.h"
 
@@ -12,6 +13,9 @@ class NETWORKEDSHOOTER_API ASProjectile : public AActor
 	GENERATED_BODY()
 
 public:
+	// should set when projectile is spawned for weapon fired projectiles
+	UPROPERTY(EditAnywhere, Category = "Damage")
+	TSubclassOf<class UGameplayEffect> DamageEffectClass;
 
 	UPROPERTY(EditAnywhere, Category = "Damage")
     float Damage = 20.f;
@@ -85,13 +89,14 @@ public:
 	virtual void PostInitializeComponents() override;
 	virtual void Destroyed() override;
 
-	virtual void ApplyDamage(const UObject* WorldContextObject, const FVector& Location, AActor* DamagedActor, float BaseDamage, AController* EventInstigator, AActor* DamageCauser, TSubclassOf<UDamageType> DamageTypeClass, ECollisionChannel DamageChannel = ECC_Visibility) const;
+	virtual void ApplyDamage(const UObject* WorldContextObject, const FVector& Location, AActor* DamagedActor, float BaseDamage, IAbilitySystemInterface* Source, AActor* DamageCauser, TSubclassOf<class UGameplayEffect> DamageEffectClass, ECollisionChannel DamageChannel = ECC_Visibility) const;
 
 protected:
 	
 	virtual void BeginPlay() override;
 
 	void StartDestroyTimer();
+	
 	void DestroyTimerFinished();
 	
 	UFUNCTION()
@@ -99,7 +104,7 @@ protected:
 	
 	void SpawnTrailSystem();
 
-	void ExplodeDamage(const UObject* WorldContextObject, const FVector& Location, AController* EventInstigator, AActor* DamageCauser, float BaseDamage, ECollisionChannel DamageChannel) const;
+	void ExplodeDamage(const UObject* WorldContextObject, TSubclassOf<UGameplayEffect> DamageEffect, const FVector& Location, IAbilitySystemInterface* Source, AActor* DamageCauser, float BaseDamage, ECollisionChannel DamageChannel) const;
 };
 
 

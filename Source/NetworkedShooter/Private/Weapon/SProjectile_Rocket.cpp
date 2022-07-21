@@ -33,11 +33,6 @@ ASProjectile_Rocket::ASProjectile_Rocket()
 void ASProjectile_Rocket::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (!HasAuthority())
-	{
-		CollisionBox->OnComponentHit.AddDynamic(this, &ASProjectile_Rocket::OnHit);
-	}
 	
 	SpawnTrailSystem();
 
@@ -64,37 +59,21 @@ void ASProjectile_Rocket::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor
 {
 	if (OtherActor == GetOwner()) return;
 	
-	if (const ASCharacter* OwnerCharacter = GetInstigator<ASCharacter>())
+	if (ASCharacter* OwnerCharacter = GetInstigator<ASCharacter>())
 	{
-		if (ASPlayerController* OwnerController = OwnerCharacter->GetPlayerController())
+		if (const ASPlayerController* OwnerController = OwnerCharacter->GetPlayerController())
 		{
-			if (bUseServerSideRewind)
+			if (OwnerCharacter->HasAuthority())
 			{
-				if (OwnerCharacter->IsLocallyControlled())
+				// fired from server host or from server with no server-side rewind
+				if ((OwnerCharacter->IsServerControlled() && OwnerCharacter->IsLocallyControlled()) || !bUseServerSideRewind)
 				{
-					if (OwnerCharacter->HasAuthority()) // shot from local server
-					{
-						ApplyDamage(this, GetActorLocation(), OtherActor, Damage, OwnerController, this, UDamageType::StaticClass());
-					}
-					else // shot from local client
-					{
-						TArray<ASCharacter*> HitCharacters;
-						UShooterGameplayStatics::GetActorsInRadius(this, GetActorLocation(), DamageOuterRadius, HitCharacters);
-					
-						OwnerCharacter->GetLagCompensationComponent()->ServerRewindHitProjectile(
-							HitCharacters,
-							TraceStart,
-							InitialVelocity,
-							OwnerController->GetServerTime() - OwnerController->GetSingleTripTime(),
-							Cast<ASWeapon_Projectile>(GetOwner())
-						);
-					}
-					
+					ApplyDamage(this, GetActorLocation(), OtherActor, Damage, OwnerCharacter, this, DamageEffectClass);
 				}
 			}
-			else if (OwnerCharacter->HasAuthority()) // no rewind shot from server
+			else if (OwnerCharacter->IsLocallyControlled() && bUseServerSideRewind) // fired from local client with server-side rewind enabled - use server-side rewind
 			{
-				ApplyDamage(this, GetActorLocation(), OtherActor, Damage, OwnerController, this, UDamageType::StaticClass());
+				ServerRewind(OwnerCharacter, OwnerController);
 			}
 		}
 	}
@@ -127,6 +106,19 @@ void ASProjectile_Rocket::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor
 	StartDestroyTimer();
 }
 
+void ASProjectile_Rocket::ServerRewind(const ASCharacter* OwnerCharacter, const ASPlayerController* OwnerController) const
+{
+	TArray<ASCharacter*> HitCharacters;
+	UShooterGameplayStatics::GetActorsInRadius(this, GetActorLocation(), DamageOuterRadius, HitCharacters);
+					
+	OwnerCharacter->GetLagCompensationComponent()->ServerRewindHitProjectile(
+		HitCharacters,
+		TraceStart,
+		InitialVelocity,
+		OwnerController->GetServerTime() - OwnerController->GetSingleTripTime(),
+		GetOwner<ASWeapon_Projectile>()
+	);
+}
 
 void ASProjectile_Rocket::Destroyed()
 {

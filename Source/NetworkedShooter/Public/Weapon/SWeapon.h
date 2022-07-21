@@ -88,19 +88,22 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Firing")
 	int32 MagCapacity;
 
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Animation")
+	UAnimationAsset* FireAnimation;
+
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Animation")
+	FName ReloadMontageSection = "Rifle";
+	
 	UPROPERTY(EditAnywhere, Category = "WeaponProperties | Effects")
 	TSubclassOf<USScopeWidget> ScopeWidgetClass;
 	UPROPERTY() USScopeWidget* ScopeWidget;
-	
-	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Effects | Firing")
-	UAnimationAsset* FireAnimation;
 
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Effects | Firing")
 	TSubclassOf<class ASBulletCasing> CasingClass;
 
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Effects | Firing")
 	class USoundCue* EquipSound;
-
+	
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Effects | Physics")
 	bool bUseWeaponPhysics;
 
@@ -111,6 +114,9 @@ private:
 	ECustomDepthColor SecondaryOutlineColor = ECustomDepthColor::CDC_Tan;
 
 protected:
+
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Damage")
+	TSubclassOf<class UGameplayEffect> DamageEffectClass;
 	
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Damage")
 	float Damage = 20.f;
@@ -248,5 +254,5 @@ public:
 	FORCEINLINE float GetFireDelay() const { return FireDelay; }
 	FORCEINLINE float GetDamage() const { return Damage; }
 	FORCEINLINE float GetHeadshotDamage() const { return HeadshotDamage; }
-	
+	FORCEINLINE FName GetReloadMontageSection() const { return ReloadMontageSection; };
 };

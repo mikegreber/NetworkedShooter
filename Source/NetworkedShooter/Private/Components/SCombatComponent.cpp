@@ -6,8 +6,10 @@
 #include "Character/SCharacter.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameMode/SGameMode.h"
 #include "HUD/SHUD.h"
 #include "Kismet/GameplayStatics.h"
+#include "Library/ShooterGameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "PlayerController/SPlayerController.h"
@@ -47,28 +49,36 @@ void USCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION(USCombatComponent, Grenades, COND_OwnerOnly);
 }
 
+void USCombatComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (HasAuthority()) SpawnDefaultWeapon();
+}
+
 void USCombatComponent::SetOwnerCharacter(ASCharacter* NewCharacter)
 {
-	if (NewCharacter && NewCharacter != OwnerCharacter)
+	if (NewCharacter && NewCharacter != Character)
 	{
-		OwnerCharacter = NewCharacter;
-		OwnerCharacter->OnEliminated.AddDynamic(this, &USCombatComponent::OnEliminated);
+		Character = NewCharacter;
+		Character->OnEliminated.AddDynamic(this, &USCombatComponent::OnEliminated);
 
-		OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
-		if (OwnerCharacter->GetFollowCamera())
+		Character->GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
+		if (Character->GetFollowCamera())
 		{
-			DefaultFOV = OwnerCharacter->GetFollowCamera()->FieldOfView;
+			DefaultFOV = Character->GetFollowCamera()->FieldOfView;
 			CurrentFOV = DefaultFOV;
 		}
 
-		bIsLocallyControlled |= OwnerCharacter->IsLocallyControlled();
-		bHasAuthority |= OwnerCharacter->HasAuthority();
+		AnimInstance = Character->GetMesh()->GetAnimInstance();
 
+		bIsLocallyControlled |= Character->IsLocallyControlled();
+		bHasAuthority |= Character->HasAuthority();
 		
 		OnCharacterSet.Broadcast();
 		OnCharacterSet.Clear();
 
-		if (OwnerCharacter && PlayerController && IsLocallyControlled()) SetComponentTickEnabled(true);
+		if (Character && Controller && IsLocallyControlled()) SetComponentTickEnabled(true);
 
 
 	}
@@ -76,20 +86,20 @@ void USCombatComponent::SetOwnerCharacter(ASCharacter* NewCharacter)
 
 void USCombatComponent::SetPlayerController(AController* NewController)
 {
-	if (NewController && NewController != PlayerController)
+	if (NewController && NewController != Controller)
 	{
 		if (ASPlayerController* NewPlayerController = Cast<ASPlayerController>(NewController))
 		{
-			PlayerController = NewPlayerController;
-			HUD = PlayerController->GetHUD<ASHUD>();
+			Controller = NewPlayerController;
+			HUD = Controller->GetHUD<ASHUD>();
 			
-			bIsLocallyControlled |= PlayerController->IsLocalController();
-			bHasAuthority |= PlayerController->HasAuthority();
+			bIsLocallyControlled |= Controller->IsLocalController();
+			bHasAuthority |= Controller->HasAuthority();
 
 			OnPlayerControllerSet.Broadcast();
 			OnPlayerControllerSet.Clear();
 			
-			if (OwnerCharacter && PlayerController && IsLocallyControlled()) SetComponentTickEnabled(true);
+			if (Character && Controller && IsLocallyControlled()) SetComponentTickEnabled(true);
 		}
 	}
 }
@@ -122,9 +132,9 @@ void USCombatComponent::TraceUnderCrosshairs(FHitResult& TraceHitResult)
 		TraceDirection
 	))
 	{
-		if (OwnerCharacter)
+		if (Character)
 		{
-			const float DistanceToCharacter = (TraceStart - OwnerCharacter->GetActorLocation()).Size();
+			const float DistanceToCharacter = (TraceStart - Character->GetActorLocation()).Size();
 			TraceStart += TraceDirection * (DistanceToCharacter + 100.f);
 		}
 		const FVector TraceEnd = TraceStart + TraceDirection * TRACE_LENGTH;
@@ -158,15 +168,15 @@ void USCombatComponent::SetHUDCrosshairs(float DeltaTime)
 		{
 			HUDPackage.SetCrosshairs(EquippedWeapon->GetHUDPackage());
 			
-			FVector Velocity = OwnerCharacter->GetVelocity();
+			FVector Velocity = Character->GetVelocity();
 			Velocity.Z = 0;
 			
-			const FVector2D WalkSpeedRange(0.f, OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed);
+			const FVector2D WalkSpeedRange(0.f, Character->GetCharacterMovement()->MaxWalkSpeed);
 			const FVector2D VelocityMultiplierRange(0.f, 1.f);
 
 			CrosshairVelocityFactor = FMath::GetMappedRangeValueClamped(WalkSpeedRange, VelocityMultiplierRange, Velocity.Size());
 
-			if (OwnerCharacter->GetCharacterMovement()->IsFalling())
+			if (Character->GetCharacterMovement()->IsFalling())
 			{
 				CrosshairInAirFactor = FMath::FInterpTo(CrosshairInAirFactor, 2.25f, DeltaTime, 2.25);
 			}
@@ -215,9 +225,9 @@ void USCombatComponent::InterpFOV(float DeltaTime)
 		}
 	}
 	
-	if (OwnerCharacter && OwnerCharacter->GetFollowCamera())
+	if (Character && Character->GetFollowCamera())
 	{
-		OwnerCharacter->GetFollowCamera()->SetFieldOfView(CurrentFOV);
+		Character->GetFollowCamera()->SetFieldOfView(CurrentFOV);
 	}
 }
 
@@ -228,7 +238,7 @@ bool USCombatComponent::CanFire() const
 
 void USCombatComponent::FireButtonPressed(bool bPressed)
 {
-	LOCALLY_CONTROLLED_ONLY(OwnerCharacter);
+	LOCALLY_CONTROLLED_ONLY(Character);
 	
 	bFireButtonPressed = bPressed;
 
@@ -240,7 +250,7 @@ void USCombatComponent::FireButtonPressed(bool bPressed)
 
 void USCombatComponent::FireWeapon()
 {
-	LOCALLY_CONTROLLED_ONLY(OwnerCharacter);
+	LOCALLY_CONTROLLED_ONLY(Character);
 	
 	if (EquippedWeapon)
 	{
@@ -273,7 +283,7 @@ void USCombatComponent::EquipWeapon(ASWeapon* WeaponToEquip)
 
 void USCombatComponent::EquipPrimaryWeapon(ASWeapon* WeaponToEquip)
 {
-	if (OwnerCharacter && WeaponToEquip)
+	if (Character && WeaponToEquip)
 	{
 		ASWeapon* OldEquippedWeapon = EquippedWeapon;
 		
@@ -286,9 +296,9 @@ void USCombatComponent::OnRep_EquippedWeapon(ASWeapon* OldEquippedWeapon)
 {
 	UpdateCarriedAmmo();
 	
-	if (EquippedWeapon && OwnerCharacter)
+	if (EquippedWeapon && Character)
 	{
-		EquippedWeapon->Equip(OwnerCharacter);
+		EquippedWeapon->Equip(Character);
 
 		if (EquippedWeapon->IsEmpty())
 		{
@@ -411,7 +421,7 @@ void USCombatComponent::DropWeapon(ASWeapon*& WeaponToDrop)
 
 void USCombatComponent::SetAiming(bool bIsAiming)
 {
-	if (OwnerCharacter && EquippedWeapon && bAiming != bIsAiming)
+	if (Character && EquippedWeapon && bAiming != bIsAiming)
 	{
 		if (IsLocallyControlled()) bAimButtonPressed = bIsAiming;
 		
@@ -421,7 +431,7 @@ void USCombatComponent::SetAiming(bool bIsAiming)
 		
 		if (HasAuthority())
 		{
-			OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed = bAiming ? AimWalkSpeed : BaseWalkSpeed;
+			Character->GetCharacterMovement()->MaxWalkSpeed = bAiming ? AimWalkSpeed : BaseWalkSpeed;
 		}
 		else
 		{
@@ -438,6 +448,11 @@ void USCombatComponent::ServerSetAiming_Implementation(bool bIsAiming)
 void USCombatComponent::OnRep_Aiming()
 {
 	if (IsLocallyControlled()) bAiming = bAimButtonPressed;
+}
+
+void USCombatComponent::PlayThrowGrenadeMontage() const
+{
+	UShooterGameplayStatics::PlayMontage(AnimInstance, ThrowGrenadeMontage);
 }
 
 void USCombatComponent::ThrowGrenade()
@@ -460,9 +475,9 @@ void USCombatComponent::ServerThrowGrenade_Implementation()
 
 void USCombatComponent::ShowAttachedGrenade(bool bShowGrenade) const
 {
-	if (OwnerCharacter && OwnerCharacter->GetAttachedGrenade())
+	if (Character && Character->GetAttachedGrenade())
 	{
-		OwnerCharacter->GetAttachedGrenade()->SetVisibility(bShowGrenade);
+		Character->GetAttachedGrenade()->SetVisibility(bShowGrenade);
 	}
 }
 
@@ -478,13 +493,13 @@ void USCombatComponent::LaunchGrenade()
 
 void USCombatComponent::ServerLaunchGrenade_Implementation(const FVector_NetQuantize& Target)
 {
-	if (GrenadeClass && OwnerCharacter && OwnerCharacter->GetAttachedGrenade())
+	if (GrenadeClass && Character && Character->GetAttachedGrenade())
 	{
-		const FVector StartingLocation = OwnerCharacter->GetAttachedGrenade()->GetComponentLocation();
+		const FVector StartingLocation = Character->GetAttachedGrenade()->GetComponentLocation();
 		const FVector ToTarget = Target - StartingLocation;
 		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = OwnerCharacter;
-		SpawnParams.Instigator = OwnerCharacter;
+		SpawnParams.Owner = Character;
+		SpawnParams.Instigator = Character;
 		if (UWorld* World = GetWorld())
 		{
 			World->SpawnActor<ASProjectile>(
@@ -520,14 +535,16 @@ void USCombatComponent::PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount)
 	}
 }
 
+
+
 void USCombatComponent::UpdateCarriedAmmo()
 {
-	if (PlayerController)
+	if (Controller)
 	{
 		if (EquippedWeapon && CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
 		{
 			CarriedAmmo = CarriedAmmoMap[EquippedWeapon->GetWeaponType()];
-			if (PlayerController->HasLocalAuthority()) OnRep_CarriedAmmo();
+			if (Controller->HasLocalAuthority()) OnRep_CarriedAmmo();
 		}
 	}
 	else
@@ -593,9 +610,9 @@ void USCombatComponent::OnRep_CombatState(ESCombatState OldCombatState)
 		}
 	case ESCombatState::ECS_ThrowingGrenade:
 		{
-			if (OwnerCharacter)
+			if (Character)
 			{
-				OwnerCharacter->PlayThrowGrenadeMontage();
+				PlayThrowGrenadeMontage();
 				AttachActorToLeftHand(EquippedWeapon);
 				ShowAttachedGrenade(true);
 			}
@@ -607,92 +624,55 @@ void USCombatComponent::OnRep_CombatState(ESCombatState OldCombatState)
 
 void USCombatComponent::PlayFireMontage() const
 {
-	if (EquippedWeapon)
-	{
-		UAnimInstance* AnimInstance = OwnerCharacter->GetMesh()->GetAnimInstance();
-		if (AnimInstance && FireWeaponMontage)
-		{
-			AnimInstance->Montage_Play(FireWeaponMontage);
-			AnimInstance->Montage_JumpToSection(bAiming ? "RifleAim" : "RifleHip");
-		}
-	}
+	UShooterGameplayStatics::PlayMontage(AnimInstance, FireWeaponMontage, bAiming ? "RifleAim" : "RifleHip");
 }
 
 void USCombatComponent::PlayReloadMontage() const
 {
 	if (EquippedWeapon)
 	{
-		UAnimInstance* AnimInstance = OwnerCharacter->GetMesh()->GetAnimInstance();
-		if (AnimInstance && ReloadMontage)
+		UShooterGameplayStatics::PlayMontage(AnimInstance, ReloadMontage, EquippedWeapon->GetReloadMontageSection());
+	}
+}
+
+void USCombatComponent::SpawnDefaultWeapon()
+{
+	// only call on server when using ASGameMode
+	if (Cast<ASGameMode>(UGameplayStatics::GetGameMode(this)))
+	{
+		if (DefaultWeaponClass && !Character->IsEliminated())
 		{
-			AnimInstance->Montage_Play(ReloadMontage);
-			FName SectionName;
-			switch(EquippedWeapon->GetWeaponType())
+			if (UWorld* World = GetWorld())
 			{
-			case EWeaponType::EWT_AssaultRifle:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_RocketLauncher:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_Pistol:
-				{
-					SectionName = "Pistol";
-					break;
-				}
-			case EWeaponType::EWT_SubmachineGun:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_Shotgun:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_SniperRifle:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			case EWeaponType::EWT_GrenadeLauncher:
-				{
-					SectionName = "Rifle";
-					break;
-				}
-			default:;
+				ASWeapon* Weapon = World->SpawnActor<ASWeapon>(DefaultWeaponClass);
+				Weapon->bDestroyWeaponOnKilled = true;
+				EquipWeapon(Weapon);
 			}
-			
-			AnimInstance->Montage_JumpToSection(SectionName);
 		}
 	}
 }
 
 void USCombatComponent::AttachActorToRightHand(AActor* ActorToAttach) const
 {
-	if (OwnerCharacter && ActorToAttach)
+	if (Character && ActorToAttach)
 	{
-		ActorToAttach->AttachToComponent(OwnerCharacter->GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "RightHandSocket");
+		ActorToAttach->AttachToComponent(Character->GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "RightHandSocket");
 	}
 }
 
 void USCombatComponent::AttachActorToLeftHand(AActor* ActorToAttach) const
 {
-	if (OwnerCharacter && ActorToAttach)
+	if (Character && ActorToAttach)
 	{
-		ActorToAttach->AttachToComponent(OwnerCharacter->GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "LeftHandSocket");
+		ActorToAttach->AttachToComponent(Character->GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "LeftHandSocket");
 	}
 }
 
 void USCombatComponent::AttachActorToBackpack(AActor* ActorToAttach) const
 {
-	if (OwnerCharacter && ActorToAttach)
+	if (Character && ActorToAttach)
 	{
-		ActorToAttach->AttachToComponent(OwnerCharacter->GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "BackpackSocket");
+		ActorToAttach->AttachToComponent(Character->GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "BackpackSocket");
 	}
 }
 
