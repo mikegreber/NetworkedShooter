@@ -12,6 +12,7 @@ Game Assets: Licensed for use with the Unreal Engine only.
   - MultiplayerSessions plugin to easily host and join games through Steam.
   - Lobby system for selecting map and game mode - starts game when all players are ready
   - All features are networked
+- Uses Gameplay Ability System for stats, damage, and buffs.
 - GameModes
   - Free For All and Team Deathmatch game modes
   - Warmup, Playing, and Cooldown phase for rounds
