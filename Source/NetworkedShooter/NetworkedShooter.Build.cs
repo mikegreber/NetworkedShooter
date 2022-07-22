@@ -22,9 +22,10 @@ public class NetworkedShooter : ModuleRules
 			"Niagara",
 			"GameplayAbilities", 
 			"GameplayTags", 
-			"GameplayTasks"
+			"GameplayTasks",
+			"ReplicationGraph"
 		});
 		
-		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "NetCore" });
 	}
 }

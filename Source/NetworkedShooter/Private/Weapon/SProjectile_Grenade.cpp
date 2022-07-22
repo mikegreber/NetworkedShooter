@@ -6,6 +6,7 @@
 #include "Character/SCharacter.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "NetworkedShooter/NetworkedShooter.h"
 #include "PlayerController/SPlayerController.h"
 #include "Sound/SoundCue.h"
 
@@ -30,7 +31,7 @@ void ASProjectile_Grenade::Destroyed()
 		if (ASCharacter* OwnerCharacter = GetInstigator<ASCharacter>())
 		{
 			// no server side rewind for grenades, apply damage on server only
-			ApplyDamage(this, GetActorLocation(), nullptr, Damage, OwnerCharacter, this, DamageEffectClass);
+			ApplyDamage(this, GetActorLocation(), nullptr, Damage, OwnerCharacter, this, DamageEffectClass, ECC_SkeletalMesh);
 		}
 	}
 	

@@ -258,11 +258,9 @@ void ASPlayerController::PlayerCharacterHUDInit()
 			AttributeSet->OnMaxShieldChanged.AddUniqueDynamic(this, &ASPlayerController::SetHUDShield);
 			AttributeSet->OnMaxShieldChanged.Broadcast(AttributeSet->GetShield(),AttributeSet->GetMaxShield());
 
-			SCharacter->GetCombatComponent()->OnCarriedAmmoUpdated.AddUniqueDynamic(this, &ASPlayerController::SetHUDCarriedAmmo);
-			SCharacter->GetCombatComponent()->OnCarriedAmmoUpdated.Broadcast(SCharacter->GetCombatComponent()->GetCarriedAmmo());
-
-			SCharacter->GetCombatComponent()->OnGrenadesUpdated.AddUniqueDynamic(this, &ASPlayerController::SetHUDGrenades);
-			SCharacter->GetCombatComponent()->OnGrenadesUpdated.Broadcast(SCharacter->GetCombatComponent()->GetGrenades());
+			USCombatComponent* CombatComponent = SCharacter->GetCombatComponent();
+			CombatComponent->OnAmmoContainerChanged.AddUniqueDynamic(this, &ASPlayerController::SetHUDCarriedAmmo);
+			CombatComponent->BroadcastState();
 		}
 		else
 		{
@@ -293,10 +291,7 @@ void ASPlayerController::OnUnPossess()
 				AttributeSet = nullptr;
 			}
 			
-			
-			// SCharacter->OnHealthChanged.RemoveDynamic(this, &ASPlayerController::SetHUDHealth);
-			SCharacter->GetCombatComponent()->OnCarriedAmmoUpdated.RemoveDynamic(this, &ASPlayerController::SetHUDCarriedAmmo);
-			SCharacter->GetCombatComponent()->OnGrenadesUpdated.RemoveDynamic(this, &ASPlayerController::SetHUDGrenades);
+			SCharacter->GetCombatComponent()->OnAmmoContainerChanged.RemoveDynamic(this, &ASPlayerController::SetHUDCarriedAmmo);
 		}
 	}
 	
@@ -535,9 +530,9 @@ void ASPlayerController::SetHUDHealth(float Health, float MaxHealth)
 	{
 		Health = AttributeSet->GetHealth();
 		MaxHealth = AttributeSet->GetMaxHealth();
-		HUD->CharacterOverlay->HealthBar->SetPercent(Health/MaxHealth);
+		HUD->HealthBar->SetPercent(Health/MaxHealth);
 		const FText HealthText = FText::FromString(FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Health), FMath::CeilToInt(MaxHealth)));
-		HUD->CharacterOverlay->HealthText->SetText(HealthText);
+		HUD->HealthText->SetText(HealthText);
 	}
 	else
 	{
@@ -551,9 +546,9 @@ void ASPlayerController::SetHUDShield(float Shield, float MaxShield)
 	{
 		Shield = AttributeSet->GetShield();
 		MaxShield = AttributeSet->GetMaxShield();
-		HUD->CharacterOverlay->ShieldBar->SetPercent(Shield/MaxShield);
+		HUD->ShieldBar->SetPercent(Shield/MaxShield);
 		const FText ShieldText = FText::FromString(FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Shield), FMath::CeilToInt(MaxShield)));
-		HUD->CharacterOverlay->ShieldText->SetText(ShieldText);
+		HUD->ShieldText->SetText(ShieldText);
 	}
 	else
 	{
@@ -566,7 +561,7 @@ void ASPlayerController::SetHUDKills(int32 Kills)
 	if (IsLocalController())
 	{
 		const FText KillsText = FText::FromString(FString::Printf(TEXT("%d"), Kills));
-		HUD->CharacterOverlay->KillsAmount->SetText(KillsText);
+		HUD->KillsAmount->SetText(KillsText);
 	}
 	else
 	{
@@ -579,7 +574,7 @@ void ASPlayerController::SetHUDDeaths(int32 Deaths)
 	if (IsLocalController())
 	{
 		const FText DeathsText = FText::FromString(FString::Printf(TEXT("%d"), Deaths));
-		HUD->CharacterOverlay->DeathsAmount->SetText(DeathsText);
+		HUD->DeathsAmount->SetText(DeathsText);
 	}
 	else
 	{
@@ -592,7 +587,7 @@ void ASPlayerController::SetHUDWeaponAmmo(int32 Ammo)
 	if (IsLocalController())
 	{
 		const FText AmmoText = FText::FromString(FString::Printf(TEXT("%d"), Ammo));
-		HUD->CharacterOverlay->WeaponAmmoAmount->SetText(AmmoText);
+		HUD->WeaponAmmoAmount->SetText(AmmoText);
 	}
 	else
 	{
@@ -600,12 +595,18 @@ void ASPlayerController::SetHUDWeaponAmmo(int32 Ammo)
 	}
 }
 
-void ASPlayerController::SetHUDCarriedAmmo(int32 Ammo)
+void ASPlayerController::SetHUDCarriedAmmo(const FGameplayTagStackContainer& AmmoContainer, FGameplayTag EquippedAmmoType)
 {
 	if (IsLocalController())
 	{
-		const FText AmmoText = FText::FromString(FString::Printf(TEXT("%d"), Ammo));
-		HUD->CharacterOverlay->CarriedAmmoAmount->SetText(AmmoText);
+		const FText AmmoText = FText::FromString(FString::Printf(TEXT("%d"), AmmoContainer.GetStackCount(EquippedAmmoType)));
+		HUD->CarriedAmmoAmount->SetText(AmmoText);
+
+
+		static FGameplayTag GrenadeAmmoType = FGameplayTag::RequestGameplayTag(FName("Ammo.Grenade"));
+		
+		const FText GrenadesText = FText::FromString(FString::Printf(TEXT("%d"), AmmoContainer.GetStackCount(GrenadeAmmoType)));
+		HUD->GrenadesText->SetText(GrenadesText);
 	}
 	else
 	{
@@ -618,7 +619,7 @@ void ASPlayerController::SetHUDGrenades(int32 Grenades)
 	if (IsLocalController())
 	{
 		const FText AmmoText = FText::FromString(FString::Printf(TEXT("%d"), Grenades));
-		HUD->CharacterOverlay->GrenadesText->SetText(AmmoText);
+		HUD->GrenadesText->SetText(AmmoText);
 	}
 	else
 	{
@@ -630,7 +631,7 @@ void ASPlayerController::SetHUDRedTeamScore(int32 Score)
 {
 	if (IsLocalController())
 	{
-		HUD->CharacterOverlay->RedTeamScore->SetText(FText::FromString(FString::FromInt(Score)));
+		HUD->RedTeamScore->SetText(FText::FromString(FString::FromInt(Score)));
 	}
 }
 
@@ -638,18 +639,20 @@ void ASPlayerController::SetHUDBlueTeamScore(int32 Score)
 {
 	if (IsLocalController())
 	{
-		HUD->CharacterOverlay->BlueTeamScore->SetText(FText::FromString(FString::FromInt(Score)));
+		HUD->BlueTeamScore->SetText(FText::FromString(FString::FromInt(Score)));
 	}
 }
+
+
 
 void ASPlayerController::HideTeamScores()
 {
 	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR);
 	if (IsLocalController())
 	{
-		HUD->CharacterOverlay->RedTeamScore->SetText(FText());
-		HUD->CharacterOverlay->BlueTeamScore->SetText(FText());
-		HUD->CharacterOverlay->ScoreSpacerText->SetText(FText());
+		HUD->RedTeamScore->SetText(FText());
+		HUD->BlueTeamScore->SetText(FText());
+		HUD->ScoreSpacerText->SetText(FText());
 	}
 }
 
@@ -658,9 +661,9 @@ void ASPlayerController::InitTeamScores()
 	UE_LOG(LogTemp, Warning, TEXT("%s %s"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR);
 	if (IsLocalController())
 	{
-		HUD->CharacterOverlay->RedTeamScore->SetText(FText::FromString("0"));
-		HUD->CharacterOverlay->BlueTeamScore->SetText(FText::FromString("0"));
-		HUD->CharacterOverlay->ScoreSpacerText->SetText(FText::FromString("|"));
+		HUD->RedTeamScore->SetText(FText::FromString("0"));
+		HUD->BlueTeamScore->SetText(FText::FromString("0"));
+		HUD->ScoreSpacerText->SetText(FText::FromString("|"));
 	}
 	else
 	{
@@ -736,9 +739,9 @@ void ASPlayerController::DisplayHighPingWarning()
 {
 	if (IsLocalController())
 	{
-		HUD->CharacterOverlay->HighPingImage->SetOpacity(1.f);
+		HUD->HighPingImage->SetOpacity(1.f);
 		HUD->CharacterOverlay->PlayAnimation(
-			HUD->CharacterOverlay->HighPingAnimation,
+			HUD->HighPingAnimation,
 			0.f,
 			5
 		);
@@ -756,10 +759,10 @@ void ASPlayerController::StopHighPingWarning()
 {
 	if (IsLocalController())
 	{
-		HUD->CharacterOverlay->HighPingImage->SetOpacity(0.f);
-		if (HUD->CharacterOverlay->IsAnimationPlaying(HUD->CharacterOverlay->HighPingAnimation))
+		HUD->HighPingImage->SetOpacity(0.f);
+		if (HUD->CharacterOverlay->IsAnimationPlaying(HUD->HighPingAnimation))
 		{
-			HUD->CharacterOverlay->StopAnimation(HUD->CharacterOverlay->HighPingAnimation);
+			HUD->CharacterOverlay->StopAnimation(HUD->HighPingAnimation);
 		}
 	}
 	else
@@ -777,14 +780,14 @@ void ASPlayerController::SetHUDMatchCountdown(float CountdownTime) const
 	{
 		if (CountdownTime < 0.f)
 		{
-			HUD->CharacterOverlay->MatchCountdownText->SetText(FText());
+			HUD->MatchCountdownText->SetText(FText());
 			return;
 		}
 		
 		const int32 Minutes = FMath::FloorToInt(CountdownTime / 60.f);
 		const int32 Seconds = FMath::FloorToInt(CountdownTime - Minutes * 60.f);
 		const FString CountdownText = FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds);
-		HUD->CharacterOverlay->MatchCountdownText->SetText(FText::FromString(CountdownText));
+		HUD->MatchCountdownText->SetText(FText::FromString(CountdownText));
 	}
 	else
 	{

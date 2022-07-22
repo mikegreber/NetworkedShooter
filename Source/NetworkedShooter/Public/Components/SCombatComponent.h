@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilitySystem/GameplayTagStack.h"
 #include "Character/SAnimInstance.h"
 #include "Types/HUDPackage.h"
 #include "Types/SCombatState.h"
@@ -15,6 +16,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FMulticastNotifyDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInt32UpdatedDelegate, int32, NewValue);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOn2Int32UpdatedDelegate, int32, A, int32, B);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAmmoContainerChanged, const FGameplayTagStackContainer&, AmmoContainer, FGameplayTag, EquippedAmmoType);
+
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class NETWORKEDSHOOTER_API USCombatComponent : public UActorComponent
 {
@@ -24,21 +27,15 @@ class NETWORKEDSHOOTER_API USCombatComponent : public UActorComponent
 
 	UPROPERTY(EditAnywhere, Category = "Combat | Defaults")
 	TSubclassOf<ASWeapon> DefaultWeaponClass;
-	
-	UPROPERTY(EditAnywhere, Category = "Combat | Ammo")
-	int32 MaxCarriedAmmoAmount = 500;
-	
-	UPROPERTY(EditAnywhere, Category = "Combat | Ammo", meta = (DisplayName = "Starting Ammo"))
-	TMap<EWeaponType, int32> CarriedAmmoMap;
-	
-	UPROPERTY(EditAnywhere, Category = "Combat | Grenades")
+
+	UPROPERTY(EditAnywhere, Category = "Combat | Defaults")
 	TSubclassOf<class ASProjectile> GrenadeClass;
 	
-	UPROPERTY(EditAnywhere, ReplicatedUsing=OnRep_CarriedGrenades, Category = "Combat | Grenades")
-	int32 Grenades = 4;
-
-	UPROPERTY(EditAnywhere, Category = "Combat | Grenades")
-	int32 MaxGrenades = 4;
+	UPROPERTY(EditDefaultsOnly, Category = "Combat | Defaults")
+	FGameplayTagStackContainer StartingAmmo;
+	
+	UPROPERTY(ReplicatedUsing=OnRep_AmmoContainer, VisibleInstanceOnly, Category = "Combat | Ammo")
+	FGameplayTagStackContainer AmmoContainer;
 
 	UPROPERTY(EditAnywhere, Category = "Combat | Movement")
 	float BaseWalkSpeed;
@@ -57,21 +54,7 @@ class NETWORKEDSHOOTER_API USCombatComponent : public UActorComponent
 
 	UPROPERTY(EditAnywhere, Category = "Combat | Animation")
 	UAnimMontage* ThrowGrenadeMontage;
-
-public:
 	
-	FMulticastNotifyDelegate OnPlayerControllerSet;
-	
-	FMulticastNotifyDelegate OnCharacterSet;
-	
-	FOnInt32UpdatedDelegate OnCarriedAmmoUpdated;
-	
-	FOnInt32UpdatedDelegate OnGrenadesUpdated;
-	
-	FOnWeaponChanged OnWeaponChanged;
-	
-private:
-
 	// read with HasAuthority()
 	bool bHasAuthority;
 
@@ -90,9 +73,6 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_SecondaryWeapon)
 	ASWeapon* SecondaryWeapon;
-	
-	UPROPERTY(ReplicatedUsing=OnRep_CarriedAmmo)
-	int32 CarriedAmmo;
 
 	UPROPERTY(ReplicatedUsing=OnRep_CombatState)
 	ESCombatState CombatState = ESCombatState::ECS_Unoccupied;
@@ -114,6 +94,12 @@ private:
 	float DefaultFOV;
 	float CurrentFOV;
 
+public:
+	
+	FOnAmmoContainerChanged OnAmmoContainerChanged;
+	FMulticastNotifyDelegate OnPlayerControllerSet;
+	FMulticastNotifyDelegate OnCharacterSet;
+	FOnWeaponChanged OnWeaponChanged;
 	
 public:
 	
@@ -137,13 +123,14 @@ public:
 	
 	void ReloadWeapon();
 	
-	void PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount);
-	
 	void PlayFireMontage() const;
 	
 	void PlayReloadMontage() const;
 
+	void AddTagStack(const FGameplayTagStack& Stack);
 	
+	void BroadcastState() const;
+
 protected:
 	
 	void SpawnDefaultWeapon();
@@ -159,10 +146,12 @@ protected:
 	void EquipWeapon(ASWeapon* WeaponToEquip);
 	
 	void EquipPrimaryWeapon(ASWeapon* WeaponToEquip);
+	
 	UFUNCTION()
 	void OnRep_EquippedWeapon(ASWeapon* OldEquippedWeapon);
 	
 	void EquipSecondaryWeapon(ASWeapon* WeaponToEquip);
+	
 	UFUNCTION()
 	void OnRep_SecondaryWeapon(ASWeapon* OldSecondaryWeapon);
 	
@@ -176,19 +165,22 @@ protected:
 	UFUNCTION(BlueprintCallable)
 	void FinishReloading();
 
-	int32 ReloadAmount();
+	int32 ReloadAmount() const;
 
 	void DropWeapon(ASWeapon*& WeaponToDrop);
 
 	void SetAiming(bool bIsAiming);
+	
 	UFUNCTION(Server, Reliable)
 	void ServerSetAiming(bool bIsAiming);
+	
 	UFUNCTION()
 	void OnRep_Aiming();
 
 	void PlayThrowGrenadeMontage() const;
 
 	void ThrowGrenade();
+	
 	UFUNCTION(Server, Reliable)
 	void ServerThrowGrenade();
 
@@ -196,6 +188,7 @@ protected:
 	
 	UFUNCTION(BlueprintCallable)
 	void LaunchGrenade();
+	
 	UFUNCTION(Server, Reliable)
 	void ServerLaunchGrenade(const FVector_NetQuantize& Target);
 	
@@ -203,13 +196,7 @@ protected:
 	void ThrowGrenadeFinished();
 
 	UFUNCTION()
-	void UpdateCarriedAmmo();
-	UFUNCTION()
-	void OnRep_CarriedAmmo() const;
-
-	void SetGrenades(int32 NewGrenades);
-	UFUNCTION()
-	void OnRep_CarriedGrenades() const;
+	void OnRep_AmmoContainer(const FGameplayTagStackContainer& OldAmmoContainer);
 	
 	void SetCombatState(ESCombatState NewCombatState);
 	UFUNCTION()
@@ -223,14 +210,14 @@ protected:
 
 	UFUNCTION()
 	void OnEliminated();
+	
 public:
+	
 	FORCEINLINE bool HasAuthority() const { return bHasAuthority; }
 	FORCEINLINE bool IsLocallyControlled() const { return bIsLocallyControlled; }
 	FORCEINLINE bool IsAiming() const { return bAiming; }
-	FORCEINLINE int32 GetCarriedAmmo() const { return CarriedAmmo; };
-	FORCEINLINE int32 GetGrenades() const { return Grenades; }
 	FORCEINLINE bool GetFireButtonPressed() const { return bFireButtonPressed; }
 	FORCEINLINE ESCombatState GetCombatState() const { return CombatState; }
 	FORCEINLINE ASWeapon* GetEquippedWeapon() const { return EquippedWeapon; }
-
+	
 };

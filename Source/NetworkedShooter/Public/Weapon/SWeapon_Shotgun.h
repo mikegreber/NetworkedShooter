@@ -24,7 +24,7 @@ protected:
 	
 	virtual void LocalFire(const FTransform& MuzzleTransform, const FVector_NetQuantize& HitTarget, bool bIsRewindFire, int8 Seed = 0) override;
 	
-	void ApplyDamage(const TMap<ASCharacter*, FHit>& HitMap);
+	void ApplyDamage(const TMap<ASCharacter*, FHit>& HitMap) const;
 	
 	void ServerRewind(const TMap<ASCharacter*, FHit>& HitMap, const FVector& TraceStart, const FVector_NetQuantize& HitTarget, int8 Seed);
 

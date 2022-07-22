@@ -10,11 +10,21 @@ UCLASS()
 class NETWORKEDSHOOTER_API ASPickupSpawnPoint : public AActor
 {
 	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category = "Spawning")
+	TArray<TSoftClassPtr<class ASPickup>> PickupClasses;
 	
-public:	
+	UPROPERTY(EditAnywhere, Category = "Spawning")
+	float SpawnPickupTimeMin;
+	
+	UPROPERTY(EditAnywhere, Category = "Spawning")
+	float SpawnPickupTimeMax;
+	
+	UPROPERTY() ASPickup* SpawnedPickup;
+	
+public:
+	
 	ASPickupSpawnPoint();
-	
-	virtual void Tick(float DeltaTime) override;
 
 protected:
 
@@ -25,23 +35,4 @@ protected:
 	UFUNCTION()
 	void StartSpawnPickupTimer(AActor* DestroyedActor = nullptr);
 	
-	void SpawnPickupTimerFinished();
-
-	UPROPERTY(EditAnywhere, Category = "Spawning")
-	TArray<TSubclassOf<class ASPickup>> PickupClasses;
-
-	UPROPERTY(EditAnywhere, Category = "Spawning")
-	TArray<TSoftClassPtr<class ASPickup>> SoftPickupClasses;
-	
-	UPROPERTY()
-	ASPickup* SpawnedPickup;
-private:	
-
-	FTimerHandle SpawnPickupTimer;
-	
-	UPROPERTY(EditAnywhere, Category = "Spawning")
-	float SpawnPickupTimeMin;
-	
-	UPROPERTY(EditAnywhere, Category = "Spawning")
-	float SpawnPickupTimeMax;
 };

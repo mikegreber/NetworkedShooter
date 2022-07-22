@@ -13,12 +13,16 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Library/ShooterGameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "PlayerController/SPlayerController.h"
 #include "PlayerState/SPlayerState.h"
 #include "Sound/SoundCue.h"
 #include "Weapon/SBulletCasing.h"
+
+#include "Net/UnrealNetwork.h"
+#include "Runtime/Engine/Public/Net/UnrealNetwork.h"
 
 #if WITH_EDITOR
 TAutoConsoleVariable<int32> ASWeapon::CVarDebugWeaponTrace(TEXT("ns.weapon.tracehit"), 0, TEXT("Debug WeaponTraceHit"), ECVF_Cheat);
@@ -88,16 +92,8 @@ void ASWeapon::OnRep_Owner()
 	}
 	else
 	{
-		// clear delegates
-		if (OwnerController && OwnerController->IsLocalController())
-		{
-			OnWeaponAmmoChanged.Broadcast(0);
-			OnWeaponAmmoChanged.Clear();
-		}
-
-		// remove scope widget
-		if (ScopeWidget) ScopeWidget->RemoveFromParent();
-		ScopeWidget = nullptr;
+		ClearUIDelegates();
+		RemoveScopeWidget();
 		
 		// clear owner references
 		OwnerCharacter = nullptr;
@@ -106,17 +102,8 @@ void ASWeapon::OnRep_Owner()
 		OwnerPlayerState = nullptr;
 
 		GetWorldTimerManager().ClearAllTimersForObject(this);
-		
-		bCanFire = false;
-	}
-}
 
-void ASWeapon::CreateScopeWidget(APlayerController* Controller)
-{
-	if (IsLocallyControlled() && ScopeWidgetClass)
-	{
-		ScopeWidget = CreateWidget<USScopeWidget>(Controller, ScopeWidgetClass);
-		if (ScopeWidget) ScopeWidget->AddToViewport();
+		bCanFire = false;
 	}
 }
 
@@ -139,21 +126,50 @@ void ASWeapon::SetPlayerController(ASPlayerController* NewController)
 	OwnerController = NewController;
 	if (OwnerController)
 	{
-		// bind UI delegates for local player
-		if (IsLocallyControlled())
-		{
-			OnWeaponAmmoChanged.AddUniqueDynamic(OwnerController, &ASPlayerController::SetHUDWeaponAmmo);
-			OnWeaponAmmoChanged.Broadcast(Ammo);
-		}
-		
+		BindUIDelegates(OwnerController);
+		CreateScopeWidget(OwnerController);
+
 		// make sure all references are set before firing
 		bCanFire = OwnerCharacter && OwnerComponent && OwnerController && OwnerPlayerState;
-
-		CreateScopeWidget(OwnerController);
 	}
 	else
 	{
 		if (OwnerCharacter) OwnerCharacter->OnPlayerControllerSet.AddUObject(this, &ASWeapon::SetPlayerController);
+	}
+}
+
+void ASWeapon::BindUIDelegates(ASPlayerController* Controller)
+{
+	if (IsLocallyControlled())
+	{
+		OnWeaponAmmoChanged.AddUniqueDynamic(Controller, &ASPlayerController::SetHUDWeaponAmmo);
+		OnWeaponAmmoChanged.Broadcast(Ammo);
+	}
+}
+
+void ASWeapon::ClearUIDelegates()
+{
+	if (OwnerController && OwnerController->IsLocalController())
+	{
+		OnWeaponAmmoChanged.Clear();
+	}
+}
+
+void ASWeapon::CreateScopeWidget(APlayerController* Controller)
+{
+	if (IsLocallyControlled() && ScopeWidgetClass)
+	{
+		ScopeWidget = CreateWidget<USScopeWidget>(Controller, ScopeWidgetClass);
+		if (ScopeWidget) ScopeWidget->AddToViewport();
+	}
+}
+
+void ASWeapon::RemoveScopeWidget()
+{
+	if (ScopeWidget)
+	{
+		ScopeWidget->RemoveFromParent();
+		ScopeWidget = nullptr;
 	}
 }
 
@@ -221,7 +237,7 @@ void ASWeapon::LocalFire(const FTransform& MuzzleTransform, const FVector_NetQua
 				}	
 			}
 		}
-
+		
 		AddAmmo(-1);
 	}
 	
@@ -393,7 +409,7 @@ void ASWeapon::OnHolstered() const
 void ASWeapon::SetAmmo(int32 NewAmmo)
 {
 	int32 Overflow;
-	Ammo = ClampWithOverflow(NewAmmo, 0, MagCapacity, Overflow);
+	Ammo = UShooterGameplayStatics::ClampWithOverflow(NewAmmo, 0, MagCapacity, Overflow);
 	if (Overflow) UE_LOG(LogTemp, Error, TEXT("%s %s Overflow! This should not happen! %d %d"), __FUNCTIONW__, *NET_ROLE_STRING_ACTOR, NewAmmo, LocalAmmoDelta);
 	OnWeaponAmmoChanged.Broadcast(Ammo);
 }
@@ -433,16 +449,6 @@ FVector ASWeapon::TraceEndWithScatter(const FVector& TraceStart, const FVector& 
 	const FVector EndLoc = SphereCenter + RandVec;
 	const FVector ToEndLoc = EndLoc - TraceStart;
 	
-	// DrawDebugSphere(GetWorld(), SphereCenter, SphereRadius, 12, FColor::Red, true);
-	// DrawDebugSphere(GetWorld(), EndLoc, 4.f, 12, FColor::Orange, true);
-	// DrawDebugLine(
-	// 	GetWorld(),
-	// 	TraceStart,
-	// 	FVector(TraceStart + ToEndLoc * TRACE_LENGTH / ToEndLoc.Size()),
-	// 	FColor::Cyan,
-	// 	true
-	// );
-	
 	return FVector(TraceStart + ToEndLoc * TRACE_LENGTH / ToEndLoc.Size());
 }
 
@@ -474,3 +480,4 @@ void ASWeapon::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AAct
 		Character->SetOverlappingWeapon(nullptr);
 	}
 }
+

@@ -5,7 +5,7 @@
 
 ASPickupSpawnPoint::ASPickupSpawnPoint()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 }
 
@@ -13,51 +13,41 @@ void ASPickupSpawnPoint::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (HasAuthority())
-	{
-		StartSpawnPickupTimer();
-	}
-}
-
-void ASPickupSpawnPoint::SpawnPickup()
-{
-	if (HasAuthority() && !SoftPickupClasses.IsEmpty())
-	{
-		const int32 Selection = FMath::RandRange(0, SoftPickupClasses.Num() - 1);
-
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		
-		SpawnedPickup = GetWorld()->SpawnActor<ASPickup>(
-			SoftPickupClasses[Selection].LoadSynchronous(),
-			GetActorTransform(),
-			SpawnParams
-		);
-		SpawnedPickup->OnDestroyed.AddDynamic(this, &ASPickupSpawnPoint::StartSpawnPickupTimer);
-	}
+	if (HasAuthority()) StartSpawnPickupTimer();
 }
 
 void ASPickupSpawnPoint::StartSpawnPickupTimer(AActor* DestroyedActor)
 {
 	const float SpawnTime = FMath::FRandRange(SpawnPickupTimeMin, SpawnPickupTimeMax);
+
+	FTimerHandle TimerHandle;
 	GetWorldTimerManager().SetTimer(
-		SpawnPickupTimer,
+		TimerHandle,
 		this,
-		&ASPickupSpawnPoint::SpawnPickupTimerFinished,
+		&ASPickupSpawnPoint::SpawnPickup,
 		SpawnTime
 	);
 }
 
-void ASPickupSpawnPoint::SpawnPickupTimerFinished()
+void ASPickupSpawnPoint::SpawnPickup()
 {
-	if (HasAuthority())
+	if (!PickupClasses.IsEmpty())
 	{
-		SpawnPickup();
+		const int32 Selection = FMath::RandRange(0, PickupClasses.Num() - 1);
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		
+		SpawnedPickup = GetWorld()->SpawnActor<ASPickup>(
+			PickupClasses[Selection].LoadSynchronous(),
+			GetActorTransform(),
+			SpawnParams
+		);
+		
+		SpawnedPickup->OnDestroyed.AddDynamic(this, &ASPickupSpawnPoint::StartSpawnPickupTimer);
 	}
 }
 
-void ASPickupSpawnPoint::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-}
+
+
 

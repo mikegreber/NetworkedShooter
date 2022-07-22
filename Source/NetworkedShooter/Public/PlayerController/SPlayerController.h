@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilitySystem/GameplayTagStack.h"
 #include "GameFramework/PlayerController.h"
 #include "SPlayerController.generated.h"
 
@@ -69,10 +70,11 @@ public:
 	UFUNCTION() void SetHUDKills(int32 Score);
 	UFUNCTION() void SetHUDDeaths(int32 Deaths);
 	UFUNCTION() void SetHUDWeaponAmmo(int32 Ammo);
-	UFUNCTION() void SetHUDCarriedAmmo(int32 Ammo);
 	UFUNCTION() void SetHUDGrenades(int32 Grenades);
 	UFUNCTION() void SetHUDRedTeamScore(int32 Score);
 	UFUNCTION() void SetHUDBlueTeamScore(int32 Score);
+
+	UFUNCTION() void SetHUDCarriedAmmo(const FGameplayTagStackContainer& AmmoContainer, FGameplayTag EquippedAmmoType);
 	
 	void HideTeamScores();
 	void InitTeamScores();
@@ -106,6 +108,7 @@ protected:
 	void HandleMatchHasStarted(bool bIsTeamMatch = false);
 	void HandleCooldown();
 
+	
 	UFUNCTION()
 	void PlayerCharacterHUDInit();
 	

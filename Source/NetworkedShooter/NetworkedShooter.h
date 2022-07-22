@@ -19,20 +19,3 @@
 #define SERVER_ONLY() {}
 #define LOCALLY_CONTROLLED_ONLY(Pawn) {}
 #endif
-
-template<typename T>
-T ClampWithOverflow(T Value, T Min, T Max, T& OutOverflow)
-{
-	if (Value < Min)
-	{
-		OutOverflow = Min - Value;
-		return Min;
-	}
-	if (Value > Max)
-	{
-		OutOverflow = Value - Max;
-		return Max;
-	}
-	OutOverflow = T();
-	return Value;
-}

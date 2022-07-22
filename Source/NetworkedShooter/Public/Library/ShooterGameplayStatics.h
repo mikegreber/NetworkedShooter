@@ -19,7 +19,7 @@ public:
 
 	static void ApplyGameplayEffect(const class IAbilitySystemInterface* Source, const IAbilitySystemInterface* Target, TSubclassOf<class UGameplayEffect> EffectClass, float Level);
 
-	static bool ApplyRadialGameplayEffectWithFalloff(const UObject* WorldContextObject, TSubclassOf<UGameplayEffect> EffectClass, const FVector& Origin, float BaseLevel, float MinimumLevel, float InnerRadius, float OuterRadius, float Falloff, AActor* EffectCauser = nullptr, IAbilitySystemInterface* Source = nullptr, const TArray<AActor*>& IgnoreActors = TArray<AActor*>(), ECollisionChannel DamageChannel = ECC_Visibility, ECollisionChannel DamagePreventionChannel = ECC_Visibility);
+	static bool ApplyGameplayEffectWithRadialFalloff(const UObject* WorldContextObject, TSubclassOf<UGameplayEffect> EffectClass, const FVector& Origin, float BaseLevel, float MinimumLevel, float InnerRadius, float OuterRadius, float Falloff, AActor* EffectCauser = nullptr, IAbilitySystemInterface* Source = nullptr, const TArray<AActor*>& IgnoreActors = TArray<AActor*>(), ECollisionChannel DamageChannel = ECC_Visibility, ECollisionChannel DamagePreventionChannel = ECC_Visibility);
 
 	// same as UGameplayStatics, but always uses GravityOverrideZ
 	static bool PredictProjectilePath(const UObject* WorldContextObject, const FPredictProjectilePathParams& PredictParams, FPredictProjectilePathResult& PredictResult);
@@ -28,6 +28,9 @@ public:
 
 	template<class T>
 	static void GetActorsInRadius(const UObject* WorldContextObject, const FVector& Origin, float Radius, TArray<T*>& OutActors, const TArray<AActor*>& IgnoreActors = TArray<AActor*>());
+
+	template<typename T>
+	static T ClampWithOverflow(T Value, T Min, T Max, T& OutOverflow);
 };
 
 template <class T>
@@ -54,4 +57,21 @@ void UShooterGameplayStatics::GetActorsInRadius(const UObject* WorldContextObjec
 			}
 		}
 	}
+}
+
+template<typename T>
+T UShooterGameplayStatics::ClampWithOverflow(T Value, T Min, T Max, T& OutOverflow)
+{
+	if (Value < Min)
+	{
+		OutOverflow = Min - Value;
+		return Min;
+	}
+	if (Value > Max)
+	{
+		OutOverflow = Value - Max;
+		return Max;
+	}
+	OutOverflow = T();
+	return Value;
 }

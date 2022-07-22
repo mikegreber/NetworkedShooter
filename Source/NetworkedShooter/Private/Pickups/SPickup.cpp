@@ -7,9 +7,12 @@
 #include "AbilitySystemInterface.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Character/SCharacter.h"
+#include "Components/SCombatComponent.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundCue.h"
+
 
 ASPickup::ASPickup()
 {
@@ -31,28 +34,40 @@ ASPickup::ASPickup()
 	PickupMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	PickupMesh->SetRelativeScale3D(FVector(5.f,5.f,5.f));
 	PickupMesh->SetRenderCustomDepth(true);
-	SetCustomDepthColor(OutlineColor);
+	SetCustomDepthColor(PickupMesh, OutlineColor);
 
 	PickupEffectComponent = CreateDefaultSubobject<UNiagaraComponent>("PickupEffectComponent");
 	PickupEffectComponent->SetupAttachment(RootComponent);
 }
 
+void ASPickup::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (PickupMesh)
+	{
+		PickupMesh->AddWorldRotation(FRotator(0.f, BaseTurnRate * DeltaTime, 0.f));
+	}
+}
+
 void ASPickup::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (!PickupMesh) SetActorTickEnabled(false);
 	
 	if (HasAuthority())
 	{
 		GetWorldTimerManager().SetTimer(
 			BindOverlapTimer,
 			this,
-			&ASPickup::BindOverlapTimerFinished,
+			&ASPickup::BindOverlap,
 			BindOverlapTime
 		);
 	}
 }
 
-void ASPickup::BindOverlapTimerFinished()
+void ASPickup::BindOverlap()
 {
 	OverlapSphere->OnComponentBeginOverlap.AddDynamic(this, &ASPickup::OnSphereBeginOverlap);
 
@@ -68,14 +83,44 @@ void ASPickup::BindOverlapTimerFinished()
 
 void ASPickup::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	bool bSuccess = false;
+	
+	bSuccess |= GiveAbilities(OtherActor);
+	bSuccess |= GiveEffects(OtherActor);
+	bSuccess |= GiveTags(OtherActor);
+	
+	if (bSuccess) Destroy();
+}
+
+bool ASPickup::GiveAbilities(AActor* OtherActor)
+{
+	if (PickupAbilities.IsEmpty()) return false;
+
+	bool bSuccess = false;
+	
 	if (const IAbilitySystemInterface* Interface = Cast<IAbilitySystemInterface>(OtherActor))
 	{
 		UAbilitySystemComponent* ASC = Interface->GetAbilitySystemComponent();
 		for (const TSubclassOf<UGameplayAbility> Ability : PickupAbilities)
 		{
 			ASC->GiveAbility(Ability);
+			bSuccess = true;
 		}
+	}
 
+	return bSuccess;
+}
+
+bool ASPickup::GiveEffects(AActor* OtherActor)
+{
+	if (PickupEffects.IsEmpty()) return false;
+
+	bool bSuccess = false;
+
+	if (const IAbilitySystemInterface* Interface = Cast<IAbilitySystemInterface>(OtherActor))
+	{
+		UAbilitySystemComponent* ASC = Interface->GetAbilitySystemComponent();
+		
 		for (const auto& [GameplayEffect, Level] : PickupEffects)
 		{
 			FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(GameplayEffect, Level, ASC->MakeEffectContext());
@@ -92,28 +137,30 @@ void ASPickup::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AA
 					Spec->SetSetByCallerMagnitude(DataTag_Overtime, Level * (Spec->GetPeriod() / Spec->GetDuration()));
 				}
 			}
-			ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+				
+			bSuccess |= ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get()).WasSuccessfullyApplied();
 		}
-		Destroy();
 	}
+
+	return bSuccess;
 }
 
-void ASPickup::SetCustomDepthColor(ECustomDepthColor Color) const
+bool ASPickup::GiveTags(AActor* OtherActor)
 {
-	if (PickupMesh)
-	{
-		PickupMesh->SetCustomDepthStencilValue(static_cast<int32>(Color));
-	}
-}
+	if (PickupTags.IsEmpty()) return false;
 
-void ASPickup::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-
-	if (PickupMesh)
+	bool bSuccess = false;
+	
+	if (const ASCharacter* Character = Cast<ASCharacter>(OtherActor))
 	{
-		PickupMesh->AddWorldRotation(FRotator(0.f, BaseTurnRate * DeltaTime, 0.f));
+		for (FGameplayTagStack& Stack : PickupTags)
+		{
+			Character->GetCombatComponent()->AddTagStack(Stack);
+			bSuccess = true;
+		}
 	}
+
+	return bSuccess;
 }
 
 void ASPickup::Destroyed()

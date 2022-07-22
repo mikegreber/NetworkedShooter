@@ -114,16 +114,16 @@ void UShooterGameplayStatics::ApplyGameplayEffect(const IAbilitySystemInterface*
 		return;
 	}
 	
-	if (Source)
+	if (Source && Target)
 	{
-		UAbilitySystemComponent* OwnerASC = Source->GetAbilitySystemComponent();
-		FGameplayEffectContextHandle ContextHandle = OwnerASC->MakeEffectContext();
+		UAbilitySystemComponent* SourceASC = Source->GetAbilitySystemComponent();
+		FGameplayEffectContextHandle ContextHandle = SourceASC->MakeEffectContext();
 	
-		FGameplayEffectSpecHandle SpecHandle = OwnerASC->MakeOutgoingSpec(EffectClass, Level, ContextHandle);
+		FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(EffectClass, Level, ContextHandle);
 	
 		if (SpecHandle.Data.IsValid())
 		{
-			OwnerASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), Target->GetAbilitySystemComponent());
+			SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), Target->GetAbilitySystemComponent());
 		}
 	}
 	else if (Target)
@@ -145,7 +145,7 @@ void UShooterGameplayStatics::ApplyGameplayEffect(const IAbilitySystemInterface*
 	
 }
 
-bool UShooterGameplayStatics::ApplyRadialGameplayEffectWithFalloff(const UObject* WorldContextObject, TSubclassOf<UGameplayEffect> EffectClass, const FVector& Origin, float BaseLevel, float MinimumLevel, float InnerRadius, float OuterRadius, float Falloff, AActor* EffectCauser, IAbilitySystemInterface* Source, const TArray<AActor*>& IgnoreActors, ECollisionChannel DamageChannel, ECollisionChannel DamagePreventionChannel)
+bool UShooterGameplayStatics::ApplyGameplayEffectWithRadialFalloff(const UObject* WorldContextObject, TSubclassOf<UGameplayEffect> EffectClass, const FVector& Origin, float BaseLevel, float MinimumLevel, float InnerRadius, float OuterRadius, float Falloff, AActor* EffectCauser, IAbilitySystemInterface* Source, const TArray<AActor*>& IgnoreActors, ECollisionChannel DamageChannel, ECollisionChannel DamagePreventionChannel)
 {
 	FCollisionQueryParams SphereParams;
 	SphereParams.bTraceComplex = false;
@@ -182,10 +182,14 @@ bool UShooterGameplayStatics::ApplyRadialGameplayEffectWithFalloff(const UObject
 		// call damage function on each affected actors
 		for (auto& [HitActor, HitComponents] : OverlapComponentMap)
 		{
-			float Damage = CalculateRadialDamage(BaseLevel, Origin, HitComponents, InnerRadius, OuterRadius, Falloff, MinimumLevel);
-			ApplyGameplayEffect(Source, Cast<IAbilitySystemInterface>(HitActor), EffectClass, Damage);
-			
-			bAppliedDamage = true;
+			if (IAbilitySystemInterface* HitTarget = Cast<IAbilitySystemInterface>(HitActor))
+			{
+				float Damage = CalculateRadialDamage(BaseLevel, Origin, HitComponents, InnerRadius, OuterRadius, Falloff, MinimumLevel);
+
+				ApplyGameplayEffect(Source, HitTarget, EffectClass, Damage);
+				
+				bAppliedDamage = true;
+			}
 		}
 	}
 

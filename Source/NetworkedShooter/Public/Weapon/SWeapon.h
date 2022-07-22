@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "SWeaponTypes.h"
 #include "Character/SCharacter.h"
 #include "Types/CustomDepth.h"
@@ -114,6 +115,9 @@ private:
 	ECustomDepthColor SecondaryOutlineColor = ECustomDepthColor::CDC_Tan;
 
 protected:
+	
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Ammo")
+	FGameplayTag AmmoType;
 
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Damage")
 	TSubclassOf<class UGameplayEffect> DamageEffectClass;
@@ -133,8 +137,6 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties | Weapon Scatter", meta = (EditCondition = "bUseScatter"))
 	float SphereRadius = 75.f;
 
-
-	
 private:
 	
 	UPROPERTY(Replicated, EditAnywhere, Category = "Weapon Properties | Replication")
@@ -164,7 +166,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual void SetOwner(AActor* NewOwner) override;
-	
+
 	virtual void Fire(FVector_NetQuantize HitTarget);
 	
 	void Equip(ACharacter* Character);
@@ -216,13 +218,19 @@ protected:
 
 	UFUNCTION()
 	void SetPlayerState(ASPlayerState* NewPlayerState);
-	
+
 	UFUNCTION()
 	void SetPlayerController(ASPlayerController* GetController);
 	
 	virtual void OnRep_Owner() override;
 
+	void BindUIDelegates(ASPlayerController* Controller);
+
+	void ClearUIDelegates();
+
 	void CreateScopeWidget(APlayerController* Controller);
+
+	void RemoveScopeWidget();
 	
 	FVector TraceEndWithScatter(const FVector& HitTarget) const;
 	FVector TraceEndWithScatter(const FVector& TraceStart, const FVector& HitTarget) const;
@@ -234,6 +242,8 @@ protected:
 	void OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 	
 	bool CanUseServerSideRewind() const;
+
+
 
 public:
 	
@@ -255,4 +265,7 @@ public:
 	FORCEINLINE float GetDamage() const { return Damage; }
 	FORCEINLINE float GetHeadshotDamage() const { return HeadshotDamage; }
 	FORCEINLINE FName GetReloadMontageSection() const { return ReloadMontageSection; };
+	FORCEINLINE FGameplayTag GetAmmoType() const { return AmmoType; };
 };
+
+

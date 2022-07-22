@@ -125,7 +125,7 @@ void ASProjectile::ExplodeDamage(const UObject* WorldContextObject, TSubclassOf<
 {
 	if (HasAuthority())
 	{
-		UShooterGameplayStatics::ApplyRadialGameplayEffectWithFalloff(
+		UShooterGameplayStatics::ApplyGameplayEffectWithRadialFalloff(
 			WorldContextObject,
 			DamageEffect,
 			Location,

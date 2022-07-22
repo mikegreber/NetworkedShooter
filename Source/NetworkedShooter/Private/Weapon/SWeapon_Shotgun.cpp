@@ -8,6 +8,7 @@
 #include "Components/SLagCompensationComponent.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "Kismet/GameplayStatics.h"
+#include "Library/ShooterGameplayStatics.h"
 #include "NetworkedShooter/NetworkedShooter.h"
 #include "Particles/ParticleSystemComponent.h"
 #include "PlayerController/SPlayerController.h"
@@ -118,19 +119,13 @@ void ASWeapon_Shotgun::PlayFireEffects(const FTransform& MuzzleTransform, const 
 	}
 }
 
-void ASWeapon_Shotgun::ApplyDamage(const TMap<ASCharacter*, FHit>& HitMap)
+void ASWeapon_Shotgun::ApplyDamage(const TMap<ASCharacter*, FHit>& HitMap) const
 {
 	for (const auto& [HitCharacter, Hits] : HitMap)
 	{
 		if (HitCharacter)
 		{
-			UGameplayStatics::ApplyDamage(
-				HitCharacter,
-				Damage * Hits.Body + HeadshotDamage * Hits.Head,
-				OwnerController,
-				this,
-				UDamageType::StaticClass()
-			);
+			UShooterGameplayStatics::ApplyGameplayEffect(OwnerCharacter, HitCharacter, DamageEffectClass, Damage * Hits.Body + HeadshotDamage * Hits.Head);
 		}
 	}
 }

@@ -16,6 +16,18 @@
 #include "Weapon/SProjectile.h"
 #include "Weapon/SWeapon.h"
 
+static FGameplayTag GrenadeTag = FGameplayTag::RequestGameplayTag(FName("Ammo.Grenade"));
+
+void USCombatComponent::OnRep_AmmoContainer(const FGameplayTagStackContainer& OldAmmoContainer)
+{
+	OnAmmoContainerChanged.Broadcast(AmmoContainer, EquippedWeapon ? EquippedWeapon->GetAmmoType() : FGameplayTag());
+
+	if (EquippedWeapon && EquippedWeapon->IsEmpty() && AmmoContainer.ContainsTag(EquippedWeapon->GetAmmoType()))
+	{
+		ReloadWeapon();
+	}
+}
+
 USCombatComponent::USCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -25,16 +37,6 @@ USCombatComponent::USCombatComponent()
 	
 	BaseWalkSpeed = 600.f;
 	AimWalkSpeed = 450.f;
-
-	CarriedAmmoMap = TMap<EWeaponType, int32>({
-		{EWeaponType::EWT_Pistol, 30},
-		{EWeaponType::EWT_SubmachineGun, 20},
-		{EWeaponType::EWT_AssaultRifle, 30},
-		{EWeaponType::EWT_Shotgun, 12},
-		{EWeaponType::EWT_SniperRifle, 2},
-		{EWeaponType::EWT_GrenadeLauncher, 4},
-		{EWeaponType::EWT_RocketLauncher, 4},
-	});
 }
 
 void USCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -45,15 +47,18 @@ void USCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(USCombatComponent, SecondaryWeapon);
 	DOREPLIFETIME(USCombatComponent, bAiming);
 	DOREPLIFETIME(USCombatComponent, CombatState);
-	DOREPLIFETIME_CONDITION(USCombatComponent, CarriedAmmo, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(USCombatComponent, Grenades, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(USCombatComponent, AmmoContainer, COND_OwnerOnly);
 }
 
 void USCombatComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (HasAuthority()) SpawnDefaultWeapon();
+	
+	if (HasAuthority())
+	{
+		SpawnDefaultWeapon();
+		AmmoContainer.Initialize(StartingAmmo);
+	}
 }
 
 void USCombatComponent::SetOwnerCharacter(ASCharacter* NewCharacter)
@@ -79,8 +84,6 @@ void USCombatComponent::SetOwnerCharacter(ASCharacter* NewCharacter)
 		OnCharacterSet.Clear();
 
 		if (Character && Controller && IsLocallyControlled()) SetComponentTickEnabled(true);
-
-
 	}
 }
 
@@ -294,12 +297,12 @@ void USCombatComponent::EquipPrimaryWeapon(ASWeapon* WeaponToEquip)
 
 void USCombatComponent::OnRep_EquippedWeapon(ASWeapon* OldEquippedWeapon)
 {
-	UpdateCarriedAmmo();
-	
 	if (EquippedWeapon && Character)
 	{
 		EquippedWeapon->Equip(Character);
 
+		OnAmmoContainerChanged.Broadcast(AmmoContainer, EquippedWeapon->GetAmmoType());
+		
 		if (EquippedWeapon->IsEmpty())
 		{
 			ReloadWeapon();
@@ -346,7 +349,7 @@ void USCombatComponent::ServerSwapWeapons_Implementation()
 
 bool USCombatComponent::CanReload() const
 {
-	return CarriedAmmo > 0 && CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon && !EquippedWeapon->IsFull() && !bLocallyReloading;
+	return CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon && AmmoContainer.ContainsTag(EquippedWeapon->GetAmmoType()) && !EquippedWeapon->IsFull() && !bLocallyReloading;
 }
 
 void USCombatComponent::ReloadWeapon()
@@ -374,22 +377,14 @@ void USCombatComponent::FinishReloading()
 	if (!EquippedWeapon) return;
 
 	const int32 Amount = ReloadAmount();
-	if (HasAuthority())
+
+	SetCombatState(ESCombatState::ECS_Unoccupied);
+	if (AmmoContainer.ContainsTag(EquippedWeapon->GetAmmoType()))
 	{
-		SetCombatState(ESCombatState::ECS_Unoccupied);
-		if (CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
-		{
-			CarriedAmmoMap[EquippedWeapon->GetWeaponType()] -= Amount;
-			UpdateCarriedAmmo();
-		}
+		AmmoContainer.RemoveStack(EquippedWeapon->GetAmmoType(), Amount);
+		OnRep_AmmoContainer(AmmoContainer);
+
 		EquippedWeapon->AddAmmo(Amount);
-	}
-	else if (IsLocallyControlled())
-	{
-		EquippedWeapon->AddAmmo(Amount);
-		
-		CarriedAmmo -= Amount;
-		OnRep_CarriedAmmo();
 	}
 	
 	if (bFireButtonPressed)
@@ -398,12 +393,12 @@ void USCombatComponent::FinishReloading()
 	}
 }
 
-int32 USCombatComponent::ReloadAmount()
+int32 USCombatComponent::ReloadAmount() const
 {
 	if (EquippedWeapon)
 	{
 		const int32 RoomInMag = EquippedWeapon->GetMagCapacity() - EquippedWeapon->GetAmmo();
-		const int32 AmountCarried = HasAuthority() ? CarriedAmmoMap[EquippedWeapon->GetWeaponType()] : CarriedAmmo;
+		const int32 AmountCarried = AmmoContainer.GetStackCount(EquippedWeapon->GetAmmoType());
 		return FMath::Clamp(RoomInMag, 0, AmountCarried);
 	}
 	
@@ -457,7 +452,7 @@ void USCombatComponent::PlayThrowGrenadeMontage() const
 
 void USCombatComponent::ThrowGrenade()
 {
-	if (Grenades > 0 && CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon)
+	if (AmmoContainer.ContainsTag(GrenadeTag) && CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon)
 	{
 		ServerThrowGrenade();
 		SetCombatState(ESCombatState::ECS_ThrowingGrenade);
@@ -466,9 +461,10 @@ void USCombatComponent::ThrowGrenade()
 
 void USCombatComponent::ServerThrowGrenade_Implementation()
 {
-	if (Grenades > 0 && CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon)
+	if (AmmoContainer.ContainsTag(GrenadeTag) && CombatState == ESCombatState::ECS_Unoccupied && EquippedWeapon)
 	{
-		SetGrenades(Grenades-1);
+		AmmoContainer.RemoveStack(GrenadeTag, 1);
+		OnRep_AmmoContainer(AmmoContainer);
 		SetCombatState(ESCombatState::ECS_ThrowingGrenade);
 	}
 }
@@ -522,67 +518,6 @@ void USCombatComponent::ThrowGrenadeFinished()
 	AttachActorToRightHand(EquippedWeapon);
 }
 
-void USCombatComponent::PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount)
-{
-	if (CarriedAmmoMap.Contains(WeaponType))
-	{
-		CarriedAmmoMap[WeaponType] = FMath::Clamp(CarriedAmmoMap[WeaponType] + AmmoAmount, 0, MaxCarriedAmmoAmount);
-		UpdateCarriedAmmo();
-	}
-	if (EquippedWeapon && EquippedWeapon->IsEmpty() && WeaponType == EquippedWeapon->GetWeaponType())
-	{
-		ReloadWeapon();
-	}
-}
-
-
-
-void USCombatComponent::UpdateCarriedAmmo()
-{
-	if (Controller)
-	{
-		if (EquippedWeapon && CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
-		{
-			CarriedAmmo = CarriedAmmoMap[EquippedWeapon->GetWeaponType()];
-			if (Controller->HasLocalAuthority()) OnRep_CarriedAmmo();
-		}
-	}
-	else
-	{
-		OnPlayerControllerSet.AddUniqueDynamic(this, &USCombatComponent::UpdateCarriedAmmo);
-	}
-}
-
-void USCombatComponent::OnRep_CarriedAmmo() const
-{
-	if (IsLocallyControlled())
-	{
-		OnCarriedAmmoUpdated.Broadcast(CarriedAmmo);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Called %s on non-local controller (%s)"), __FUNCTIONW__, *NET_ROLE_STRING_COMPONENT);
-	}
-}
-
-void USCombatComponent::SetGrenades(int32 NewGrenades)
-{
-	Grenades = FMath::Clamp(NewGrenades, 0, MaxGrenades);
-	if (IsLocallyControlled()) OnRep_CarriedGrenades();
-}
-
-void USCombatComponent::OnRep_CarriedGrenades() const
-{
-	if (IsLocallyControlled())
-	{
-		OnGrenadesUpdated.Broadcast(Grenades);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Called %s on non-local controller (%s)"), __FUNCTIONW__, *NET_ROLE_STRING_COMPONENT);
-	}
-}
-
 void USCombatComponent::SetCombatState(ESCombatState NewCombatState)
 {
 	if (CombatState == NewCombatState) return;
@@ -633,6 +568,17 @@ void USCombatComponent::PlayReloadMontage() const
 	{
 		UShooterGameplayStatics::PlayMontage(AnimInstance, ReloadMontage, EquippedWeapon->GetReloadMontageSection());
 	}
+}
+
+void USCombatComponent::AddTagStack(const FGameplayTagStack& Stack)
+{
+	AmmoContainer.AddStack(Stack);
+	OnRep_AmmoContainer(AmmoContainer);
+}
+
+void USCombatComponent::BroadcastState() const
+{
+	OnAmmoContainerChanged.Broadcast(AmmoContainer, EquippedWeapon ? EquippedWeapon->GetAmmoType() : FGameplayTag());
 }
 
 void USCombatComponent::SpawnDefaultWeapon()

@@ -31,31 +31,14 @@ void ASHUD::CreateEliminationAnnouncement()
 	}
 }
 
-void ASHUD::AddEliminationAnnouncement(FString Attacker, FString Victim)
+void ASHUD::AddEliminationAnnouncement(FString Attacker, FString Victim) const
 {
-	APlayerController* OwningPlayer = GetOwningPlayerController();
-	if (OwningPlayer && EliminationAnnouncementClass)
+	if (EliminationAnnouncementClass)
 	{
 		if (EliminationAnnouncement)
 		{
 			EliminationAnnouncement->SetEliminationAnnouncementText(Attacker, Victim);
 		}
-		
-		// EliminationAnnouncement = CreateWidget<USEliminationAnnouncementWidget>(OwningPlayer, EliminationAnnouncementClass);
-		// if (EliminationAnnouncement)
-		// {
-		// 	EliminationAnnouncement->SetEliminationAnnouncementText(Attacker, Victim);
-		// 	EliminationAnnouncement->AddToViewport();
-		//
-		// 	FTimerHandle Handle;
-		// 	GetWorldTimerManager().SetTimer(
-		// 		Handle,
-		// 		FTimerDelegate::CreateUObject(this, &ASHUD::EliminationAnnouncementTimerFinished, EliminationAnnouncement),
-		// 		EliminationAnnouncementTime,
-		// 		false
-		// 	);
-		// 	
-		// }
 	}
 }
 
@@ -82,7 +65,7 @@ void ASHUD::CreateAnnouncement()
 	}
 }
 
-void ASHUD::ShowAnnouncement(bool bShow)
+void ASHUD::ShowAnnouncement(bool bShow) const
 {
 	if (Announcement)
 	{
@@ -101,11 +84,27 @@ void ASHUD::CreateOverlay()
 			CharacterOverlay = CreateWidget<USCharacterOverlay>(PlayerController, CharacterOverlayClass);
 			CharacterOverlay->SetVisibility(ESlateVisibility::Collapsed);
 			CharacterOverlay->AddToViewport();
+
+			HealthBar = CharacterOverlay->HealthBar;
+			HealthText = CharacterOverlay->HealthText;
+			ShieldBar = CharacterOverlay->ShieldBar;
+			ShieldText = CharacterOverlay->ShieldText;
+			KillsAmount = CharacterOverlay->KillsAmount;
+			DeathsAmount = CharacterOverlay->DeathsAmount;
+			WeaponAmmoAmount = CharacterOverlay->WeaponAmmoAmount;
+			CarriedAmmoAmount = CharacterOverlay->CarriedAmmoAmount;
+			MatchCountdownText = CharacterOverlay->MatchCountdownText;
+			GrenadesText = CharacterOverlay->GrenadesText;
+			RedTeamScore = CharacterOverlay->RedTeamScore;
+			BlueTeamScore = CharacterOverlay->BlueTeamScore;
+			ScoreSpacerText = CharacterOverlay->ScoreSpacerText;
+			HighPingImage = CharacterOverlay->HighPingImage;
+			HighPingAnimation = CharacterOverlay->HighPingAnimation;
 		}
 	}
 }
 
-void ASHUD::ShowOverlay(bool bShow)
+void ASHUD::ShowOverlay(bool bShow) const
 {
 	if (CharacterOverlay)
 	{
@@ -148,22 +147,6 @@ void ASHUD::DrawHUD()
 	}
 }
 
-void ASHUD::UpdateKills(int32 NewValue)
-{
-	CharacterOverlay->KillsAmount->SetText(FText::FromString(FString::Printf(TEXT("%d"), NewValue)));
-}
-
-void ASHUD::UpdateDeaths(int32 NewValue)
-{
-	CharacterOverlay->DeathsAmount->SetText(FText::FromString(FString::Printf(TEXT("%d"), NewValue)));
-}
-
-// void ASHUD::BindDelegates(ASPlayerState* PlayerState)
-// {
-// 	PlayerState->OnKillsUpdated.AddDynamic(this, &ASHUD::UpdateKills);
-// 	PlayerState->OnDeathsUpdated.AddDynamic(this, &ASHUD::UpdateDeaths);
-// }
-
 void ASHUD::DrawCrosshair(UTexture2D* Texture, FVector2D ViewportCenter, FVector2D Spread,  FLinearColor CrosshairColor)
 {
 	const float TextureWidth = Texture->GetSizeX();
@@ -182,5 +165,4 @@ void ASHUD::DrawCrosshair(UTexture2D* Texture, FVector2D ViewportCenter, FVector
 		CrosshairColor
 	);
 }
-
 
